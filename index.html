@@ -583,12 +583,10 @@ async function migrateFromLocalStorage(){
   showToast('Your existing phone data synced to cloud!','success');
 }
 
-async function seedFirestore(){
-  const snap = await db.collection('customers').get();
-  if(!snap.empty) return;
-  const oldCustomers = JSON.parse(localStorage.getItem(PREFIX+'customers')||'null');
-  if(oldCustomers && oldCustomers.length) return; // migration will handle
-
+async function seedFirestore(){const snap=await db.collection('customers').get();if(!snap.empty)return; // Don't seed if customers already exist
+  const oldCustomers=JSON.parse(localStorage.getItem(PREFIX+'customers')||'null');
+  if(oldCustomers&&oldCustomers.length)return; // Don't seed if local data exists
+  // Only seed on completely fresh install
   const sc=[
     {id:'c1',name:'Ram Bahadur Thapa',nameNp:'राम बहादुर थापा',phone:'9841234567',address:'Kathmandu',creditLimit:15000,balance:8500,status:'active',createdAt:new Date(Date.now()-30*864e5).toISOString(),notes:'Regular customer',addedBy:'wilson',addedByName:'Wilson',lastEditedBy:null,lastEditedByName:null},
     {id:'c2',name:'Sita Devi Sharma',nameNp:'सीता देवी शर्मा',phone:'9857654321',address:'Lalitpur',creditLimit:15000,balance:10000,status:'overdue',createdAt:new Date(Date.now()-45*864e5).toISOString(),notes:'Monthly settlement',addedBy:'nita',addedByName:'Nita',lastEditedBy:null,lastEditedByName:null},
@@ -608,9 +606,9 @@ async function seedFirestore(){
     {id:'t9',customerId:'c5',type:'CREDIT',amount:7000,description:'Wholesale order',date:new Date(Date.now()-8*864e5).toISOString(),createdBy:'kush',createdByName:'Kush',createdAt:new Date(Date.now()-8*864e5).toISOString()},
     {id:'t10',customerId:'c5',type:'CREDIT',amount:6750,description:'Rice, Dal, Oil bulk',date:new Date(Date.now()-3*864e5).toISOString(),createdBy:'nita',createdByName:'Nita',createdAt:new Date(Date.now()-3*864e5).toISOString()}
   ];
-  const batch = db.batch();
-  sc.forEach(c=> batch.set(db.collection('customers').doc(c.id), c));
-  st.forEach(tx=> batch.set(db.collection('transactions').doc(tx.id), tx));
+  const batch=db.batch();
+  sc.forEach(c=>batch.set(db.collection('customers').doc(c.id),c));
+  st.forEach(tx=>batch.set(db.collection('transactions').doc(tx.id),tx));
   await batch.commit();
 }
 
@@ -1010,7 +1008,7 @@ async function doReset(){
   cSnap.forEach(d=>batch.delete(d.ref));
   tSnap.forEach(d=>batch.delete(d.ref));
   await batch.commit();
-  await seedFirestore();
+  // await seedFirestore(); // Removed: user should manually add customers
   closeAllModals();
   showToast(t('dataReset'),'success');
 }
@@ -1105,7 +1103,7 @@ async function init(){
   firebase.initializeApp(firebaseConfig);
   initFirestore();
   await migrateFromLocalStorage();
-  await seedFirestore();
+  // await seedFirestore(); // Removed: user should manually add customers
   updateUI();
 }
 init();
