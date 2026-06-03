@@ -1109,7 +1109,7 @@ async function init(){
   updateUI();
 }
 init();
-</script>
+
 // ===================== PWA INSTALL PROMPT =====================
 let deferredPrompt=null;
 let pwaInstallDismissed=false;
@@ -1119,7 +1119,7 @@ function dismissPWA(){pwaInstallDismissed=true;localStorage.setItem(PREFIX+'pwaD
 if(localStorage.getItem(PREFIX+'pwaDismissed')==='true'){pwaInstallDismissed=true;}
 if(window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true){pwaInstallDismissed=true;}
 function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;}
-if(isIOS()&&!window.navigator.standalone&&!pwaInstallDismissed){setTimeout(()=>{document.getElementById('pwaInstallBanner').classList.remove('hidden');document.getElementById('pwaInstallBtn').textContent='How to Install';document.querySelector('.pwa-install-banner .pwa-text span').textContent='Tap Share button, then "Add to Home Screen"';},3000);}
+if(isIOS()&&!window.navigator.standalone&&!pwaInstallDismissed){setTimeout(()=>{document.getElementById('pwaInstallBanner').classList.remove('hidden');document.getElementById('pwaInstallBtn').textContent='How to Install';document.querySelector('.pwa-install-banner .pwa-text span').textContent='Tap Share button, then "Add to Home Screen"';},3000);}</script>
 
 <!-- PWA Install Prompt -->
 <div id="pwaInstallBanner" class="pwa-install-banner hidden">
