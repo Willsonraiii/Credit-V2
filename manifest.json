@@ -1,7 +1,7 @@
 {
   "name": "Yalambar Store - Credit Tracker",
   "short_name": "Yalambar Store",
-  "description": "Credit tracking and customer management for Yalambar Store, Nepal",
+  "description": "Credit tracking for Yalambar Store, Nepal",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#020617",
