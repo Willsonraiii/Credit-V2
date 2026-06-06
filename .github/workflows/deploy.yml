@@ -1,0 +1,45 @@
+name: Deploy Daily Credit Tracker V3
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build app
+        run: npm run build
+
+      - name: Keep custom domain
+        run: echo "yalambarcredit.willsonrai.com.np" > dist/CNAME
+
+      - name: Copy existing PWA files if present
+        run: |
+          cp sw.js dist/sw.js
+          [ -f manifest.json ] && cp manifest.json dist/manifest.json || true
+          [ -f icon-180.png ] && cp icon-180.png dist/icon-180.png || true
+          [ -f icon-192.png ] && cp icon-192.png dist/icon-192.png || true
+          [ -f icon-512.png ] && cp icon-512.png dist/icon-512.png || true
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
