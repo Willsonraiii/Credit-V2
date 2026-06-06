@@ -16,11 +16,12 @@ import {
   updateCustomerFire, updateTransactionFire,
   setCreditPaidFire,
   createCloudBackupFire, listCloudBackupsFire, restoreCloudBackupFire,
+  recalculateCustomerBalancesFire,
   type CloudBackup,
 } from "./firebase";
 import Login from "./Login";
 import {
-  loadUsers, saveUsers, getActiveUserId, setActiveUserId, makeUserId,
+  loadUsers, saveUsers, makeUserId,
   type PosUser,
 } from "./users";
 import { formatNPR, balanceFor, totals } from "./lib/utils";
@@ -292,10 +293,7 @@ export default function App() {
 
   // ─── POS users / login ───────────────────────────────────────
   const [users, setUsers] = useState<PosUser[]>(() => loadUsers());
-  const [activeUser, setActiveUser] = useState<PosUser | null>(() => {
-    const id = getActiveUserId();
-    return id ? loadUsers().find((u) => u.id === id) ?? null : null;
-  });
+  const [activeUser, setActiveUser] = useState<PosUser | null>(null);
   const staffCode = activeUser ? activeUser.name.toUpperCase() : "";
   const isAdmin = !!activeUser?.isAdmin;
 
@@ -317,14 +315,50 @@ export default function App() {
   // ─── Login / logout helpers ──────────────────────────────────
   const handleLogin = (user: PosUser) => {
     setActiveUser(user);
-    setActiveUserId(user.id);
   };
   const handleLogout = () => {
     setActiveUser(null);
-    setActiveUserId(null);
     setShowSettings(false);
+    setShowAdminPanel(false);
+    setShowManageUsers(false);
+    setShowRestoreBackup(false);
+    setShowAddCustomer(false);
+    setShowCredit(false);
+    setShowPayment(false);
+    setEditTx(null);
+    setEditCustomer(null);
     setView({ tab: "dashboard", customerId: null });
   };
+
+  useEffect(() => {
+    if (!activeUser) return;
+
+    const lockApp = () => {
+      setActiveUser(null);
+      setShowSettings(false);
+      setShowAdminPanel(false);
+      setShowManageUsers(false);
+      setShowRestoreBackup(false);
+      setShowAddCustomer(false);
+      setShowCredit(false);
+      setShowPayment(false);
+      setEditTx(null);
+      setEditCustomer(null);
+      setView({ tab: "dashboard", customerId: null });
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) lockApp();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", lockApp);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", lockApp);
+    };
+  }, [activeUser]);
 
   // Firestore listeners
   useEffect(() => {
@@ -392,7 +426,7 @@ export default function App() {
     const paymentTxs = txs.filter((tx) => tx.type === "payment");
     const grossCredit = creditTxs.reduce((sum, tx) => sum + tx.amount, 0);
     const paidCreditTxs = creditTxs.filter((tx) => tx.paid);
-    const totalPaidAmount = paymentTxs.reduce((sum, tx) => sum + tx.amount, 0) + paidCreditTxs.reduce((sum, tx) => sum + tx.amount, 0);
+    const totalPaidAmount = paidCreditTxs.reduce((sum, tx) => sum + tx.amount, 0);
     const latestTx = [...txs].sort((a, b) => (b.date?.seconds ?? 0) - (a.date?.seconds ?? 0))[0];
     const latestPayment = [...paymentTxs, ...paidCreditTxs].sort((a, b) => (b.date?.seconds ?? 0) - (a.date?.seconds ?? 0))[0];
     return {
@@ -563,6 +597,25 @@ export default function App() {
     } catch (e) {
       console.error(e);
       notify(language === "ne" ? "Restore असफल भयो" : "Restore failed");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleRepairOriginalBalances = async () => {
+    const ok = confirm(
+      language === "ne"
+        ? "पुरानो हिसाब अनुसार balance मिलाउने? Credit जोडिन्छ, payment घट्छ।"
+        : "Repair balances using original logic? Credits add, payments subtract.",
+    );
+    if (!ok) return;
+    setBackupBusy(true);
+    try {
+      await recalculateCustomerBalancesFire();
+      notify(language === "ne" ? "Balance मिल्यो ✓" : "Balances repaired ✓");
+    } catch (e) {
+      console.error(e);
+      notify(language === "ne" ? "Balance repair असफल भयो" : "Balance repair failed");
     } finally {
       setBackupBusy(false);
     }
@@ -1342,7 +1395,7 @@ export default function App() {
         </div>
 
         {isAdmin ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               onClick={() => { setShowSettings(false); setShowManageUsers(true); }}
               className={btnGhost}
@@ -1354,6 +1407,13 @@ export default function App() {
               className={btnPrimary}
             >
               <KeyRound className="h-4 w-4" /> {language === "ne" ? "व्यवस्थापक प्यानल" : "Admin Panel"}
+            </button>
+            <button
+              onClick={handleRepairOriginalBalances}
+              disabled={backupBusy}
+              className={cn(btnGhost, "disabled:opacity-40 disabled:cursor-not-allowed")}
+            >
+              <RotateCcw className="h-4 w-4" /> {language === "ne" ? "पुरानो हिसाब" : "Repair Old Logic"}
             </button>
           </div>
         ) : (

@@ -409,4 +409,37 @@ export async function restoreCloudBackupFire(backupId: string, userCode?: string
   await commitChunked(restoreOps);
 }
 
+export async function recalculateCustomerBalancesFire() {
+  const customerSnap = await getDocs(customersCol);
+  const txSnap = await getDocs(transactionsCol);
+  const balances = new Map<string, number>();
+
+  customerSnap.forEach((snapshot) => {
+    balances.set(snapshot.id, 0);
+  });
+
+  txSnap.forEach((snapshot) => {
+    const raw = snapshot.data();
+    const customerId = String(raw.customerId || "");
+    if (!customerId) return;
+
+    const type = normalizeType(raw.type);
+    const amount = Number(raw.amount ?? 0);
+    const paid = Boolean(raw.paid);
+    const current = balances.get(customerId) || 0;
+
+    if (type === "credit") {
+      balances.set(customerId, current + (paid ? 0 : amount));
+    } else {
+      balances.set(customerId, current - amount);
+    }
+  });
+
+  const ops: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
+  balances.forEach((balance, customerId) => {
+    ops.push((batch) => batch.update(doc(db, "customers", customerId), { balance }));
+  });
+  await commitChunked(ops);
+}
+
 export { Timestamp };
