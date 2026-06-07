@@ -525,38 +525,66 @@ export default function App() {
     const paidRecords = sorted.filter(
       (tx) => tx.type === "payment" || (tx.type === "credit" && tx.paid && !tx.paidByPaymentId),
     );
+    const totalUnpaid = unpaidCredits.reduce((sum, tx) => sum + tx.amount, 0);
+    const totalPaid = paidRecords.reduce((sum, tx) => sum + tx.amount, 0);
+    const receiptNo = `YS-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${customer.id.slice(-4).toUpperCase()}`;
+    const rule = "--------------------------------";
+    const center = (value: string) => value.length >= 32 ? value : `${" ".repeat(Math.floor((32 - value.length) / 2))}${value}`;
+    const money = (value: number) => formatNPR(value).replace("Rs. ", "Rs.");
+    const itemLine = (left: string, amount: number) => {
+      const clean = left.length > 21 ? `${left.slice(0, 18)}...` : left;
+      const right = money(amount);
+      return `${clean.padEnd(Math.max(1, 32 - right.length), " ")}${right}`;
+    };
 
     const lines = [
-      `*${copy.app}*`,
-      `*${copy.statement}*`,
+      "```",
+      center("YALAMBAR STORE"),
+      center("Daily Credit Tracker"),
+      rule,
+      `${language === "ne" ? "स्टेटमेन्ट" : "STATEMENT"}: ${receiptNo}`,
       `${copy.generatedOn}: ${formatLiveDate(new Date(), language)}`,
-      "",
-      `${copy.customers.slice(0, -1) || "Customer"}: ${customer.name}`,
+      rule,
+      `${language === "ne" ? "ग्राहक" : "CUSTOMER"}: ${customer.name}`,
       customer.phone ? `${copy.phone}: ${customer.phone}` : "",
-      `${copy.outstanding}: *${formatNPR(Math.max(0, balance))}*`,
-      "",
-      `*${copy.unpaidCredits}*`,
+      customer.address ? `${copy.address}: ${customer.address}` : "",
+      rule,
+      center(copy.unpaidCredits.toUpperCase()),
+      rule,
     ].filter(Boolean);
 
     if (unpaidCredits.length === 0) {
-      lines.push(language === "ne" ? "- बाँकी उधारो छैन" : "- No unpaid credit items");
+      lines.push(language === "ne" ? "बाँकी उधारो छैन" : "No unpaid credit items");
     } else {
       unpaidCredits.forEach((tx, index) => {
-        const secured = tx.secured ? ` (${copy.secured})` : "";
-        lines.push(`${index + 1}. ${formatRecordDate(tx.date, language, true)} - ${tx.note || copy.credit}${secured} - ${formatNPR(tx.amount)}`);
+        const secured = tx.secured ? ` ${copy.secured}` : "";
+        lines.push(`${String(index + 1).padStart(2, "0")}. ${formatRecordDate(tx.date, language, true)}`);
+        lines.push(itemLine(`${tx.note || copy.credit}${secured}`, tx.amount));
       });
     }
 
-    lines.push("", `*${copy.paidRecords}*`);
+    lines.push(rule);
+    lines.push(itemLine(copy.outstanding.toUpperCase(), Math.max(0, balance)));
+    lines.push(rule);
+    lines.push(center(copy.paidRecords.toUpperCase()));
+    lines.push(rule);
+
     if (paidRecords.length === 0) {
-      lines.push(language === "ne" ? "- तिरेको रेकर्ड छैन" : "- No paid records");
+      lines.push(language === "ne" ? "तिरेको रेकर्ड छैन" : "No paid records");
     } else {
-      paidRecords.forEach((tx, index) => {
-        lines.push(`${index + 1}. ${formatRecordDate(tx.date, language, true)} - ${tx.note || (tx.type === "payment" ? copy.payment : copy.credit)} - ${formatNPR(tx.amount)} ${copy.paidSign}`);
+      paidRecords.slice(-8).forEach((tx, index) => {
+        lines.push(`${String(index + 1).padStart(2, "0")}. ${formatRecordDate(tx.date, language, true)}`);
+        lines.push(itemLine(`${tx.note || (tx.type === "payment" ? copy.payment : copy.credit)} ${copy.paidSign}`, tx.amount));
       });
     }
 
-    lines.push("", language === "ne" ? "धन्यवाद।" : "Thank you.");
+    lines.push(rule);
+    lines.push(itemLine(copy.totalPaid.toUpperCase(), totalPaid));
+    lines.push(itemLine(copy.totalCredit.toUpperCase(), totalUnpaid));
+    lines.push(rule);
+    lines.push(center(language === "ne" ? "धन्यवाद" : "THANK YOU"));
+    lines.push("```");
+
     return lines.join("\n");
   };
 
