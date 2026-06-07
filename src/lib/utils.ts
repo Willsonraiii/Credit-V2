@@ -22,7 +22,7 @@ export const balanceFor = (customerId: string, txs: Transaction[]) => {
   for (const t of txs) {
     if (t.customerId !== customerId) continue;
     if (t.type === "credit") bal += t.paid ? 0 : t.amount;
-    else bal -= t.amount;
+    else if (!t.appliedToCreditIds?.length) bal -= t.amount;
   }
   return bal;
 };
@@ -32,7 +32,7 @@ export const totals = (customers: Customer[], transactions: Transaction[]) => ({
   transactions: transactions.length,
   totalCredit: customers.reduce((s, c) => s + Math.max(0, Number.isFinite(c.balance) ? c.balance : balanceFor(c.id, transactions)), 0),
   totalPaid: transactions
-    .filter((t) => t.type === "payment" || (t.type === "credit" && t.paid))
+    .filter((t) => t.type === "payment" || (t.type === "credit" && t.paid && !t.paidByPaymentId))
     .reduce((s, t) => s + t.amount, 0),
   totalGiven: transactions.filter((t) => t.type === "credit").reduce((s, t) => s + t.amount, 0),
 });
