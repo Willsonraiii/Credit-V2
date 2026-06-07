@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import type { PosUser } from "./users";
 import {
   initializeFirestore,
   persistentLocalCache,
@@ -44,6 +45,7 @@ const db = initializeFirestore(app, {
 export const customersCol = collection(db, "customers");
 export const transactionsCol = collection(db, "transactions");
 export const cloudBackupsCol = collection(db, "cloudBackups");
+export const posUsersCol = collection(db, "posUsers");
 
 function toTimestamp(value: unknown): Timestamp {
   if (value instanceof Timestamp) return value;
@@ -109,6 +111,52 @@ export interface CloudBackup {
   label: string | null;
   customerCount: number;
   transactionCount: number;
+}
+
+export function listenPosUsers(
+  callback: (users: PosUser[]) => void,
+  onError: (err: Error) => void,
+) {
+  return onSnapshot(
+    posUsersCol,
+    (snap) => {
+      const users: PosUser[] = [];
+      snap.forEach((d) => {
+        const raw = d.data();
+        users.push({
+          id: d.id,
+          name: String(raw.name ?? "User"),
+          pin: String(raw.pin ?? "0000").padStart(4, "0").slice(0, 4),
+          isAdmin: Boolean(raw.isAdmin),
+        });
+      });
+      users.sort((a, b) => a.name.localeCompare(b.name));
+      callback(users);
+    },
+    onError,
+  );
+}
+
+export async function savePosUsersFire(users: PosUser[]) {
+  const existing = await getDocs(posUsersCol);
+  const nextIds = new Set(users.map((u) => u.id));
+  const batch = writeBatch(db);
+
+  existing.forEach((snapshot) => {
+    if (!nextIds.has(snapshot.id)) batch.delete(doc(db, "posUsers", snapshot.id));
+  });
+
+  users.forEach((user) => {
+    batch.set(doc(db, "posUsers", user.id), {
+      id: user.id,
+      name: user.name,
+      pin: user.pin,
+      isAdmin: user.isAdmin,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  await batch.commit();
 }
 
 // Real-time subscriptions
