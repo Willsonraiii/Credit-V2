@@ -1,4 +1,4 @@
-const CACHE_NAME = "yalambar-v4-daily-credit";
+const CACHE_NAME = "yalambar-v5-offline-firestore";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
