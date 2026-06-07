@@ -21,4 +21,8 @@ export interface Transaction {
   paid: boolean;
   paidAt: Timestamp | null;
   paidBy: string | null;
+  paidByPaymentId?: string | null;
+  appliedToCreditIds?: string[];
+  secured?: boolean;
+  securedBy?: string | null;
 }
