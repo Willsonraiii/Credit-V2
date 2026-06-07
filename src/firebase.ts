@@ -15,6 +15,7 @@ import {
   doc,
   Timestamp,
   writeBatch,
+  runTransaction,
 } from "firebase/firestore";
 
 // ============================================================
@@ -71,6 +72,27 @@ function displayNameFromCode(code?: string) {
   return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
 }
 
+function findExactCreditMatch(credits: Array<{ id: string; amount: number }>, target: number) {
+  // Finds one exact combination of unpaid credit entries matching a payment amount.
+  // This keeps unrelated credit items untouched.
+  const limited = credits.filter((c) => c.amount > 0).slice(0, 80);
+  const dp = new Map<number, string[]>();
+  dp.set(0, []);
+
+  for (const credit of limited) {
+    const entries = Array.from(dp.entries());
+    for (const [sum, ids] of entries) {
+      const next = sum + credit.amount;
+      if (next > target || dp.has(next)) continue;
+      const nextIds = [...ids, credit.id];
+      if (next === target) return nextIds;
+      dp.set(next, nextIds);
+    }
+  }
+
+  return [];
+}
+
 async function commitChunked(ops: Array<(batch: ReturnType<typeof writeBatch>) => void>) {
   for (let i = 0; i < ops.length; i += 450) {
     const batch = writeBatch(db);
@@ -101,6 +123,10 @@ export interface FireTransaction {
   paid: boolean;
   paidAt: Timestamp | null;
   paidBy: string | null;
+  paidByPaymentId?: string | null;
+  appliedToCreditIds?: string[];
+  secured?: boolean;
+  securedBy?: string | null;
 }
 
 export interface CloudBackup {
@@ -209,6 +235,10 @@ export function listenTransactions(
           paid: Boolean(raw.paid),
           paidAt: raw.paidAt ? toTimestamp(raw.paidAt) : null,
           paidBy: raw.paidByName ?? raw.paidBy ?? null,
+          paidByPaymentId: raw.paidByPaymentId ?? null,
+          appliedToCreditIds: Array.isArray(raw.appliedToCreditIds) ? raw.appliedToCreditIds : [],
+          secured: Boolean(raw.secured),
+          securedBy: raw.securedByName ?? raw.securedBy ?? null,
         });
       });
       result.sort((a, b) => (b.date?.seconds ?? 0) - (a.date?.seconds ?? 0));
@@ -260,6 +290,32 @@ export async function addTransactionFire(data: {
   const amount = Math.max(0, Math.round(data.amount));
   const userCode = data.userCode?.trim() || null;
   const userName = displayNameFromCode(userCode || undefined);
+  let appliedToCreditIds: string[] = [];
+
+  if (data.type === "payment") {
+    const txSnap = await getDocs(transactionsCol);
+    const unpaidCredits: Array<{ id: string; amount: number; seconds: number; secured: boolean }> = [];
+    txSnap.forEach((snapshot) => {
+      const raw = snapshot.data();
+      if (String(raw.customerId || "") !== data.customerId) return;
+      if (normalizeType(raw.type) !== "credit") return;
+      if (Boolean(raw.paid)) return;
+      unpaidCredits.push({
+        id: snapshot.id,
+        amount: Number(raw.amount ?? 0),
+        seconds: toTimestamp(raw.date ?? raw.createdAt).seconds,
+        secured: Boolean(raw.secured),
+      });
+    });
+    unpaidCredits.sort((a, b) => a.seconds - b.seconds);
+    const normalCredits = unpaidCredits.filter((tx) => !tx.secured);
+    appliedToCreditIds = findExactCreditMatch(normalCredits, amount);
+    if (appliedToCreditIds.length === 0) {
+      const exactSecured = unpaidCredits.find((tx) => tx.secured && tx.amount === amount);
+      appliedToCreditIds = exactSecured ? [exactSecured.id] : [];
+    }
+  }
+
   const batch = writeBatch(db);
   batch.set(doc(db, "transactions", id), {
     id,
@@ -277,7 +333,26 @@ export async function addTransactionFire(data: {
     paidAt: null,
     paidBy: null,
     paidByName: null,
+    appliedToCreditIds,
+    autoApplied: appliedToCreditIds.length > 0,
+    secured: false,
+    securedAt: null,
+    securedBy: null,
+    securedByName: null,
   });
+
+  if (appliedToCreditIds.length > 0) {
+    for (const creditId of appliedToCreditIds) {
+      batch.update(doc(db, "transactions", creditId), {
+        paid: true,
+        paidAt: now,
+        paidBy: userCode?.toLowerCase() || null,
+        paidByName: userName,
+        paidByPaymentId: id,
+      });
+    }
+  }
+
   batch.update(doc(db, "customers", data.customerId), {
     balance: increment(data.type === "credit" ? amount : -amount),
   });
@@ -334,36 +409,61 @@ export async function updateTransactionFire(id: string, data: {
 
 export async function setCreditPaidFire(id: string, paid: boolean, userCode?: string) {
   const txRef = doc(db, "transactions", id);
-  const snap = await getDoc(txRef);
-  if (!snap.exists()) return;
-
-  const raw = snap.data();
-  const type = normalizeType(raw.type);
-  if (type !== "credit") return;
-
-  const currentPaid = Boolean(raw.paid);
-  if (currentPaid === paid) return;
-
-  const amount = Number(raw.amount ?? 0);
-  const customerId = String(raw.customerId || "");
   const cleanUser = userCode?.trim() || null;
   const userName = displayNameFromCode(cleanUser || undefined);
   const now = new Date().toISOString();
 
-  const batch = writeBatch(db);
-  batch.update(txRef, {
-    paid,
-    paidAt: paid ? now : null,
-    paidBy: paid ? cleanUser?.toLowerCase() || null : null,
-    paidByName: paid ? userName : null,
-  });
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(txRef);
+    if (!snap.exists()) return;
 
-  if (customerId) {
-    batch.update(doc(db, "customers", customerId), {
-      balance: increment(paid ? -amount : amount),
+    const raw = snap.data();
+    const type = normalizeType(raw.type);
+    if (type !== "credit") return;
+
+    const currentPaid = Boolean(raw.paid);
+    if (currentPaid === paid) return;
+  if (currentPaid && raw.paidByPaymentId && !paid) return;
+
+    const amount = Number(raw.amount ?? 0);
+    const customerId = String(raw.customerId || "");
+
+    transaction.update(txRef, {
+      paid,
+      paidAt: paid ? now : null,
+      paidBy: paid ? cleanUser?.toLowerCase() || null : null,
+      paidByName: paid ? userName : null,
     });
-  }
-  await batch.commit();
+
+    if (customerId) {
+      transaction.update(doc(db, "customers", customerId), {
+        balance: increment(paid ? -amount : amount),
+      });
+    }
+  });
+}
+
+export async function setCreditSecuredFire(id: string, secured: boolean, userCode?: string) {
+  const txRef = doc(db, "transactions", id);
+  const cleanUser = userCode?.trim() || null;
+  const userName = displayNameFromCode(cleanUser || undefined);
+  const now = new Date().toISOString();
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(txRef);
+    if (!snap.exists()) return;
+    const raw = snap.data();
+    if (normalizeType(raw.type) !== "credit") return;
+    if (Boolean(raw.paid)) return;
+    if (Boolean(raw.secured) === secured) return;
+
+    transaction.update(txRef, {
+      secured,
+      securedAt: secured ? now : null,
+      securedBy: secured ? cleanUser?.toLowerCase() || null : null,
+      securedByName: secured ? userName : null,
+    });
+  });
 }
 
 export async function deleteCustomerFire(id: string) {
