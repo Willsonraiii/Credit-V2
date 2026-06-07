@@ -14,7 +14,7 @@ import {
   addCustomerFire, addTransactionFire,
   deleteCustomerFire, deleteTransactionFire,
   updateCustomerFire, updateTransactionFire,
-  setCreditPaidFire,
+  setCreditPaidFire, setCreditSecuredFire,
   createCloudBackupFire, listCloudBackupsFire, restoreCloudBackupFire,
   recalculateCustomerBalancesFire,
   listenPosUsers, savePosUsersFire,
@@ -98,6 +98,20 @@ const text = {
     year: "Year",
     month: "Month",
     day: "Day",
+    undo: "Undo",
+    undoLast: "Undo last entry",
+    noUndo: "Nothing to undo",
+    secure: "Secure",
+    secured: "SECURED",
+    unsecure: "Unsecure",
+    statement: "Statement",
+    sendWhatsApp: "WhatsApp",
+    sendViber: "Viber",
+    copyStatement: "Copy",
+    outstanding: "Outstanding Balance",
+    unpaidCredits: "Unpaid Credits",
+    paidRecords: "Paid Records",
+    generatedOn: "Generated on",
   },
   ne: {
     app: "यलम्बर स्टोर",
@@ -159,6 +173,20 @@ const text = {
     year: "वर्ष",
     month: "महिना",
     day: "दिन",
+    undo: "Undo",
+    undoLast: "अन्तिम रेकर्ड Undo",
+    noUndo: "Undo गर्ने रेकर्ड छैन",
+    secure: "सुरक्षित",
+    secured: "सुरक्षित",
+    unsecure: "सुरक्षित हटाउनुहोस्",
+    statement: "स्टेटमेन्ट",
+    sendWhatsApp: "WhatsApp",
+    sendViber: "Viber",
+    copyStatement: "Copy",
+    outstanding: "बाँकी रकम",
+    unpaidCredits: "तिर्न बाँकी उधारो",
+    paidRecords: "तिरेका रेकर्डहरू",
+    generatedOn: "बनाइएको मिति",
   },
 };
 
@@ -286,6 +314,7 @@ export default function App() {
   const [showRestoreBackup, setShowRestoreBackup] = useState(false);
   const [cloudBackups, setCloudBackups] = useState<CloudBackup[]>([]);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [paidBusyIds, setPaidBusyIds] = useState<Set<string>>(() => new Set());
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [language, setLanguage] = useState<LanguageMode>(() =>
@@ -481,6 +510,56 @@ export default function App() {
     return `${plus}${paid} = ${formatNPR(Math.max(0, row.balance))}`;
   };
 
+  const normalizePhoneForWhatsApp = (phone?: string | null) => {
+    const digits = (phone || "").replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("977")) return digits;
+    if (digits.length === 10 && /^(97|98)/.test(digits)) return `977${digits}`;
+    if (digits.startsWith("0") && digits.length > 8) return `977${digits.slice(1)}`;
+    return digits;
+  };
+
+  const buildCustomerStatement = (customer: Customer, txs: Transaction[], balance: number) => {
+    const sorted = [...txs].sort((a, b) => (a.date?.seconds ?? 0) - (b.date?.seconds ?? 0));
+    const unpaidCredits = sorted.filter((tx) => tx.type === "credit" && !tx.paid);
+    const paidRecords = sorted.filter(
+      (tx) => tx.type === "payment" || (tx.type === "credit" && tx.paid && !tx.paidByPaymentId),
+    );
+
+    const lines = [
+      `*${copy.app}*`,
+      `*${copy.statement}*`,
+      `${copy.generatedOn}: ${formatLiveDate(new Date(), language)}`,
+      "",
+      `${copy.customers.slice(0, -1) || "Customer"}: ${customer.name}`,
+      customer.phone ? `${copy.phone}: ${customer.phone}` : "",
+      `${copy.outstanding}: *${formatNPR(Math.max(0, balance))}*`,
+      "",
+      `*${copy.unpaidCredits}*`,
+    ].filter(Boolean);
+
+    if (unpaidCredits.length === 0) {
+      lines.push(language === "ne" ? "- बाँकी उधारो छैन" : "- No unpaid credit items");
+    } else {
+      unpaidCredits.forEach((tx, index) => {
+        const secured = tx.secured ? ` (${copy.secured})` : "";
+        lines.push(`${index + 1}. ${formatRecordDate(tx.date, language, true)} - ${tx.note || copy.credit}${secured} - ${formatNPR(tx.amount)}`);
+      });
+    }
+
+    lines.push("", `*${copy.paidRecords}*`);
+    if (paidRecords.length === 0) {
+      lines.push(language === "ne" ? "- तिरेको रेकर्ड छैन" : "- No paid records");
+    } else {
+      paidRecords.forEach((tx, index) => {
+        lines.push(`${index + 1}. ${formatRecordDate(tx.date, language, true)} - ${tx.note || (tx.type === "payment" ? copy.payment : copy.credit)} - ${formatNPR(tx.amount)} ${copy.paidSign}`);
+      });
+    }
+
+    lines.push("", language === "ne" ? "धन्यवाद।" : "Thank you.");
+    return lines.join("\n");
+  };
+
   const filteredTxs = transactions
     .filter((tx) => txFilter === "all" || tx.type === txFilter)
     .filter(txMatchesDateFilter)
@@ -519,10 +598,43 @@ export default function App() {
 
   const handleToggleCreditPaid = async (tx: Transaction) => {
     if (tx.type !== "credit") return;
+    if (tx.paid && tx.paidByPaymentId) return;
+    if (tx.secured && !tx.paid) {
+      const ok = confirm(language === "ne"
+        ? "यो सुरक्षित credit हो। पूरा रकम आएको छ भने मात्र PAID गर्नुहोस्। जारी राख्ने?"
+        : "This is a secured credit. Mark PAID only if the full amount is paid. Continue?");
+      if (!ok) return;
+    }
+    if (paidBusyIds.has(tx.id)) return;
+    setPaidBusyIds((current) => new Set(current).add(tx.id));
     try {
       await setCreditPaidFire(tx.id, !tx.paid, staffCode);
       notify(!tx.paid ? "Credit item marked PAID ✓" : "Credit item kept as credit ✓");
     } catch (e) { console.error(e); notify("Failed to update paid status"); }
+    finally {
+      setPaidBusyIds((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleCreditSecured = async (tx: Transaction) => {
+    if (tx.type !== "credit" || tx.paid) return;
+    if (paidBusyIds.has(tx.id)) return;
+    setPaidBusyIds((current) => new Set(current).add(tx.id));
+    try {
+      await setCreditSecuredFire(tx.id, !tx.secured, staffCode);
+      notify(!tx.secured ? "Credit item secured ✓" : "Credit item unsecured ✓");
+    } catch (e) { console.error(e); notify("Failed to update secure status"); }
+    finally {
+      setPaidBusyIds((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }
   };
 
   const handleDeleteCustomer = async (c: Customer) => {
@@ -541,6 +653,28 @@ export default function App() {
     if (!confirm("Delete this transaction?")) return;
     try { await deleteTransactionFire(tx.id); notify("Transaction deleted ✓"); }
     catch (e) { console.error(e); notify("Failed to delete"); }
+  };
+
+  const handleUndoLastCustomerEntry = async () => {
+    if (!selectedCustomer || customerTxs.length === 0) {
+      notify(copy.noUndo);
+      return;
+    }
+    const latest = customerTxs[0];
+    const label = `${latest.type === "credit" ? copy.credit : copy.payment} ${formatNPR(latest.amount)}${latest.note ? ` - ${latest.note}` : ""}`;
+    const ok = confirm(
+      language === "ne"
+        ? `अन्तिम रेकर्ड Undo गर्ने?\n${label}`
+        : `Undo last entry?\n${label}`,
+    );
+    if (!ok) return;
+    try {
+      await deleteTransactionFire(latest.id);
+      notify(language === "ne" ? "Undo भयो ✓" : "Undo complete ✓");
+    } catch (e) {
+      console.error(e);
+      notify(language === "ne" ? "Undo असफल भयो" : "Undo failed");
+    }
   };
 
   const handleAddTx = async (type: "credit" | "payment", amount: number, note?: string) => {
@@ -819,7 +953,15 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleUndoLastCustomerEntry}
+                    disabled={customerTxs.length === 0}
+                    className={cn(btnGhost, "text-xs sm:text-sm disabled:opacity-40 disabled:cursor-not-allowed")}
+                    title={copy.undoLast}
+                  >
+                    <RotateCcw className="h-4 w-4" /> {copy.undo}
+                  </button>
                   <button onClick={() => setShowPayment(true)} className={btnGhost + " text-xs sm:text-sm"}>
                     <HandCoins className="h-4 w-4" /> {copy.payment}
                   </button>
@@ -873,6 +1015,52 @@ export default function App() {
                   </div>
                 );
               })()}
+              {(() => {
+                const statement = buildCustomerStatement(selectedCustomer, customerTxs, customerBalance);
+                const encoded = encodeURIComponent(statement);
+                const phone = normalizePhoneForWhatsApp(selectedCustomer.phone);
+                const whatsAppUrl = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+                const viberUrl = `viber://forward?text=${encoded}`;
+                return (
+                  <div className="relative mt-3 rounded-xl bg-white/[0.04] border border-white/10 px-3 py-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-white flex items-center gap-2">
+                          <Receipt className="h-4 w-4 text-blue-300" /> {copy.statement}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-white/45">
+                          {language === "ne" ? "ग्राहकलाई पठाउन तयार स्टेटमेन्ट" : "Ready to send customer statement"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                        <a
+                          href={whatsAppUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 px-3 py-2 text-xs font-semibold text-green-200 hover:bg-[#25D366]/25 transition-colors"
+                        >
+                          {copy.sendWhatsApp}
+                        </a>
+                        <a
+                          href={viberUrl}
+                          className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#7360f2]/15 border border-[#7360f2]/30 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-[#7360f2]/25 transition-colors"
+                        >
+                          {copy.sendViber}
+                        </a>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard?.writeText(statement);
+                            notify(language === "ne" ? "Statement copy भयो ✓" : "Statement copied ✓");
+                          }}
+                          className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                        >
+                          {copy.copyStatement}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="glass rounded-2xl p-4 sm:p-5">
@@ -892,6 +1080,9 @@ export default function App() {
                   {customerTxs.map((tx) => {
                     const isCredit = tx.type === "credit";
                     const creditPaid = isCredit && tx.paid;
+                    const isPaidBusy = paidBusyIds.has(tx.id);
+                    const linkedPaid = creditPaid && !!tx.paidByPaymentId;
+                    const secured = isCredit && !!tx.secured && !creditPaid;
                     return (
                       <li key={tx.id} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${creditPaid ? "bg-[#1155ff]/5" : ""}`}>
                         <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl ring-1 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
@@ -901,6 +1092,7 @@ export default function App() {
                           <p className="text-sm text-white capitalize">
                             {isCredit ? copy.credit : copy.payment}
                             {(creditPaid || !isCredit) && <span className="ml-2 rounded-full bg-[#1155ff]/15 px-2 py-0.5 text-[10px] font-semibold text-blue-200 ring-1 ring-blue-500/30">{copy.paidSign}</span>}
+                            {secured && <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-400/20">{copy.secured}</span>}
                           </p>
                           <p className="text-xs text-white/50 truncate">{tx.note || "—"} · {formatRecordDate(tx.date, language, true)}</p>
                           <p className="text-[10px] text-white/35 truncate">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
@@ -911,10 +1103,21 @@ export default function App() {
                         {isCredit && (
                           <button
                             onClick={() => handleToggleCreditPaid(tx)}
-                            className={`opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${creditPaid ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-[#1155ff]/15 text-blue-200 hover:bg-[#1155ff]/25"}`}
+                            disabled={isPaidBusy || linkedPaid}
+                            className={`opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-[#1155ff]/15 text-blue-200 hover:bg-[#1155ff]/25"}`}
                             title={creditPaid ? (language === "ne" ? "फेरि उधारो राख्नुहोस्" : "Keep as credit") : (language === "ne" ? "तिरेको चिन्ह लगाउनुहोस्" : "Mark paid")}
                           >
-                            {creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
+                            {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
+                          </button>
+                        )}
+                        {isCredit && !creditPaid && (
+                          <button
+                            onClick={() => handleToggleCreditSecured(tx)}
+                            disabled={isPaidBusy}
+                            className={`opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"}`}
+                            title={secured ? copy.unsecure : copy.secure}
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" /> {secured ? copy.unsecure : copy.secure}
                           </button>
                         )}
                         <button
@@ -1278,6 +1481,9 @@ export default function App() {
                     if (!c) return null;
                     const isCredit = tx.type === "credit";
                     const creditPaid = isCredit && tx.paid;
+                    const isPaidBusy = paidBusyIds.has(tx.id);
+                    const linkedPaid = creditPaid && !!tx.paidByPaymentId;
+                    const secured = isCredit && !!tx.secured && !creditPaid;
                     return (
                       <li key={tx.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors">
                         <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl ring-1 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
@@ -1289,6 +1495,7 @@ export default function App() {
                           <p className="text-xs text-white/50 truncate">
                             {tx.note || (isCredit ? copy.credit : copy.payment)} · {formatRecordDate(tx.date, language, true)}
                             {(creditPaid || !isCredit) && <span className="ml-1 rounded-full bg-[#1155ff]/15 px-1.5 py-0.5 text-[9px] font-semibold text-blue-200 ring-1 ring-blue-500/30">{copy.paidSign}</span>}
+                            {secured && <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200 ring-1 ring-amber-400/20">{copy.secured}</span>}
                           </p>
                           <p className="text-[10px] text-white/35 truncate">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
                         </div>
@@ -1299,8 +1506,21 @@ export default function App() {
                           <p className="text-[10px] uppercase tracking-wider text-white/40">{creditPaid ? copy.paidSign : isCredit ? copy.credit : copy.paidSign}</p>
                         </div>
                         {isCredit && (
-                          <button onClick={() => handleToggleCreditPaid(tx)} className={`opacity-0 group-hover:opacity-100 transition-opacity inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold ${creditPaid ? "text-amber-200 hover:bg-amber-500/10" : "text-blue-200 hover:bg-[#1155ff]/15"}`}>
-                            {creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
+                          <button
+                            onClick={() => handleToggleCreditPaid(tx)}
+                            disabled={isPaidBusy || linkedPaid}
+                            className={`opacity-0 group-hover:opacity-100 transition-opacity inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "text-amber-200 hover:bg-amber-500/10" : "text-blue-200 hover:bg-[#1155ff]/15"}`}
+                          >
+                            {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
+                          </button>
+                        )}
+                        {isCredit && !creditPaid && (
+                          <button
+                            onClick={() => handleToggleCreditSecured(tx)}
+                            disabled={isPaidBusy}
+                            className={`opacity-0 group-hover:opacity-100 transition-opacity inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "text-amber-200 hover:bg-amber-500/10" : "text-white/55 hover:bg-white/10"}`}
+                          >
+                            {secured ? copy.unsecure : copy.secure}
                           </button>
                         )}
                         <button onClick={() => handleDeleteTx(tx)} className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-300 hover:bg-rose-500/10">
