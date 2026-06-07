@@ -17,6 +17,7 @@ import {
   setCreditPaidFire,
   createCloudBackupFire, listCloudBackupsFire, restoreCloudBackupFire,
   recalculateCustomerBalancesFire,
+  listenPosUsers, savePosUsersFire,
   type CloudBackup,
 } from "./firebase";
 import Login from "./Login";
@@ -311,6 +312,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("yalambar_language", language);
   }, [language]);
+
+  useEffect(() => {
+    const unsubscribe = listenPosUsers(
+      (cloudUsers) => {
+        if (cloudUsers.length === 0) return;
+        setUsers(cloudUsers);
+        saveUsers(cloudUsers);
+        setActiveUser((current) => current ? cloudUsers.find((u) => u.id === current.id) ?? null : current);
+      },
+      (err) => console.error("Failed to sync POS users", err),
+    );
+    return unsubscribe;
+  }, []);
 
   // ─── Login / logout helpers ──────────────────────────────────
   const handleLogin = (user: PosUser) => {
@@ -1435,7 +1449,17 @@ export default function App() {
         copy={copy}
         users={users}
         activeUserId={activeUser.id}
-        onSave={(next) => { setUsers(next); saveUsers(next); notify(language === "ne" ? "सुरक्षित ✓" : "Saved ✓"); }}
+        onSave={async (next) => {
+          setUsers(next);
+          saveUsers(next);
+          try {
+            await savePosUsersFire(next);
+            notify(language === "ne" ? "सुरक्षित ✓" : "Saved ✓");
+          } catch (e) {
+            console.error(e);
+            notify(language === "ne" ? "Cloud sync असफल भयो" : "Cloud sync failed");
+          }
+        }}
       />
 
       {/* Restore Cloud Backup Modal (admin only) */}
