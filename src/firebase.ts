@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   onSnapshot,
   deleteDoc,
@@ -32,7 +34,11 @@ const firebaseConfig = {
 // ============================================================
 
 const app = initializeApp(firebaseConfig, "yalambar-v3");
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  // Persistent disk cache lets the app show customers/transactions offline
+  // after they have loaded once on the device.
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 
 // Firestore collection references
 export const customersCol = collection(db, "customers");
