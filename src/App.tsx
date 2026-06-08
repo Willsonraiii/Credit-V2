@@ -1112,44 +1112,27 @@ export default function App() {
                     const linkedPaid = creditPaid && !!tx.paidByPaymentId;
                     const secured = isCredit && !!tx.secured && !creditPaid;
                     return (
-                      <li key={tx.id} className={`group rounded-xl px-3 py-3 hover:bg-white/[0.03] transition-colors ${creditPaid ? "bg-[#1155ff]/5" : ""}`}>
-                        <div className="flex items-start gap-3">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 shrink-0 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
-                            {isCredit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-white break-words">
-                                  {tx.note || (isCredit ? copy.credit : copy.payment)}
-                                </p>
-                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isCredit ? "bg-rose-500/10 text-rose-300 ring-1 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-1 ring-blue-500/30"}`}>
-                                    {isCredit ? copy.credit : copy.payment}
-                                  </span>
-                                  {(creditPaid || !isCredit) && <span className="rounded-full bg-[#1155ff]/15 px-2 py-0.5 text-[10px] font-semibold text-blue-200 ring-1 ring-blue-500/30">{copy.paidSign}</span>}
-                                  {secured && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-400/20">{copy.secured}</span>}
-                                </div>
-                              </div>
-                              <p className={`shrink-0 text-sm font-semibold tabular text-right ${creditPaid ? "text-blue-300 line-through decoration-blue-300/60" : isCredit ? "text-rose-300" : "text-blue-300"}`}>
-                                {isCredit ? "+" : "−"}{formatNPR(tx.amount).replace("Rs. ", "")}
-                              </p>
-                            </div>
-
-                            <div className="mt-2 grid grid-cols-1 gap-1 text-[11px] text-white/45 sm:grid-cols-2">
-                              <p>{formatRecordDate(tx.date, language, false)}</p>
-                              <p className="sm:text-right">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
-                            </div>
-                          </div>
+                      <li key={tx.id} className={`group grid grid-cols-[2.5rem_minmax(0,1fr)_4.6rem_4rem] gap-2 rounded-xl px-3 py-3 hover:bg-white/[0.03] transition-colors ${creditPaid ? "bg-[#1155ff]/5" : ""}`}>
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 shrink-0 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
+                          {isCredit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                         </div>
 
-                        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white break-words leading-snug">
+                            {tx.note || (isCredit ? copy.credit : copy.payment)}
+                          </p>
+                          <p className="mt-1 text-[11px] text-white/45">
+                            {isCredit ? copy.credit : copy.payment} · {formatRecordDate(tx.date, language, false)}
+                          </p>
+                          <p className="text-[10px] text-white/35 truncate">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
+                        </div>
+
+                        <div className="flex min-w-0 flex-col items-stretch justify-center gap-1.5">
                           {isCredit && (
                             <button
                               onClick={() => handleToggleCreditPaid(tx)}
                               disabled={isPaidBusy || linkedPaid}
-                              className={`inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-[#1155ff]/15 text-blue-200 hover:bg-[#1155ff]/25"}`}
+                              className={`inline-flex w-full items-center justify-center rounded-lg px-1.5 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-[#1155ff]/15 text-blue-200 hover:bg-[#1155ff]/25"}`}
                               title={creditPaid ? (language === "ne" ? "फेरि उधारो राख्नुहोस्" : "Keep as credit") : (language === "ne" ? "तिरेको चिन्ह लगाउनुहोस्" : "Mark paid")}
                             >
                               {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
@@ -1159,12 +1142,24 @@ export default function App() {
                             <button
                               onClick={() => handleToggleCreditSecured(tx)}
                               disabled={isPaidBusy}
-                              className={`inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"}`}
+                              className={`inline-flex w-full items-center justify-center rounded-lg px-1.5 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"}`}
                               title={secured ? copy.unsecure : copy.secure}
                             >
-                              <ShieldCheck className="h-3.5 w-3.5" /> {secured ? copy.unsecure : copy.secure}
+                              {secured ? copy.unsecure : copy.secure}
                             </button>
                           )}
+                          {!isCredit && (
+                            <span className="inline-flex w-full items-center justify-center rounded-lg bg-[#1155ff]/15 px-1.5 py-1 text-[10px] font-semibold text-blue-200 ring-1 ring-blue-500/30">
+                              {copy.paidSign}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex min-w-0 flex-col items-end gap-1.5">
+                          <p className={`text-sm font-semibold tabular text-right ${creditPaid ? "text-blue-300 line-through decoration-blue-300/60" : isCredit ? "text-rose-300" : "text-blue-300"}`}>
+                            {isCredit ? "+" : "−"}{formatNPR(tx.amount).replace("Rs. ", "")}
+                          </p>
+                          <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => setEditTx(tx)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-blue-300 hover:bg-[#1155ff]/15"
@@ -1179,6 +1174,7 @@ export default function App() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                          </div>
                         </div>
                       </li>
                     );
@@ -1531,47 +1527,52 @@ export default function App() {
                     const linkedPaid = creditPaid && !!tx.paidByPaymentId;
                     const secured = isCredit && !!tx.secured && !creditPaid;
                     return (
-                      <li key={tx.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors">
-                        <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl ring-1 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
+                      <li key={tx.id} className="group grid grid-cols-[2.5rem_minmax(0,1fr)_4.6rem_4rem] gap-2 px-4 py-3 hover:bg-white/[0.03] transition-colors">
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 shrink-0 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
                           {isCredit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                         </div>
-                        <Avatar name={c.name} size={32} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{c.name}</p>
-                          <p className="text-xs text-white/50 truncate">
-                            {tx.note || (isCredit ? copy.credit : copy.payment)} · {formatRecordDate(tx.date, language, true)}
-                            {(creditPaid || !isCredit) && <span className="ml-1 rounded-full bg-[#1155ff]/15 px-1.5 py-0.5 text-[9px] font-semibold text-blue-200 ring-1 ring-blue-500/30">{copy.paidSign}</span>}
-                            {secured && <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200 ring-1 ring-amber-400/20">{copy.secured}</span>}
-                          </p>
+
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white break-words leading-snug">{tx.note || (isCredit ? copy.credit : copy.payment)}</p>
+                          <p className="mt-0.5 text-xs text-white/50 truncate">{c.name}</p>
+                          <p className="mt-1 text-[11px] text-white/40">{isCredit ? copy.credit : copy.payment} · {formatRecordDate(tx.date, language, false)}</p>
                           <p className="text-[10px] text-white/35 truncate">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
                         </div>
-                        <div className="text-right">
-                          <p className={`text-sm font-semibold tabular ${creditPaid ? "text-blue-300 line-through decoration-blue-300/60" : isCredit ? "text-rose-300" : "text-blue-300"}`}>
+
+                        <div className="flex min-w-0 flex-col items-stretch justify-center gap-1.5">
+                          {isCredit && (
+                            <button
+                              onClick={() => handleToggleCreditPaid(tx)}
+                              disabled={isPaidBusy || linkedPaid}
+                              className={`inline-flex w-full justify-center rounded-lg px-1.5 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "text-amber-200 hover:bg-amber-500/10" : "text-blue-200 hover:bg-[#1155ff]/15"}`}
+                            >
+                              {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
+                            </button>
+                          )}
+                          {isCredit && !creditPaid && (
+                            <button
+                              onClick={() => handleToggleCreditSecured(tx)}
+                              disabled={isPaidBusy}
+                              className={`inline-flex w-full justify-center rounded-lg px-1.5 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "text-amber-200 hover:bg-amber-500/10" : "text-white/55 hover:bg-white/10"}`}
+                            >
+                              {secured ? copy.unsecure : copy.secure}
+                            </button>
+                          )}
+                          {!isCredit && (
+                            <span className="inline-flex w-full items-center justify-center rounded-lg bg-[#1155ff]/15 px-1.5 py-1 text-[10px] font-semibold text-blue-200 ring-1 ring-blue-500/30">
+                              {copy.paidSign}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex min-w-0 flex-col items-end gap-1.5">
+                          <p className={`text-sm font-semibold tabular text-right ${creditPaid ? "text-blue-300 line-through decoration-blue-300/60" : isCredit ? "text-rose-300" : "text-blue-300"}`}>
                             {isCredit ? "+" : "−"}{formatNPR(tx.amount).replace("Rs. ", "")}
                           </p>
-                          <p className="text-[10px] uppercase tracking-wider text-white/40">{creditPaid ? copy.paidSign : isCredit ? copy.credit : copy.paidSign}</p>
+                          <button onClick={() => handleDeleteTx(tx)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-300 hover:bg-rose-500/10">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
-                        {isCredit && (
-                          <button
-                            onClick={() => handleToggleCreditPaid(tx)}
-                            disabled={isPaidBusy || linkedPaid}
-                            className={`opacity-0 group-hover:opacity-100 transition-opacity inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "text-amber-200 hover:bg-amber-500/10" : "text-blue-200 hover:bg-[#1155ff]/15"}`}
-                          >
-                            {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
-                          </button>
-                        )}
-                        {isCredit && !creditPaid && (
-                          <button
-                            onClick={() => handleToggleCreditSecured(tx)}
-                            disabled={isPaidBusy}
-                            className={`opacity-0 group-hover:opacity-100 transition-opacity inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "text-amber-200 hover:bg-amber-500/10" : "text-white/55 hover:bg-white/10"}`}
-                          >
-                            {secured ? copy.unsecure : copy.secure}
-                          </button>
-                        )}
-                        <button onClick={() => handleDeleteTx(tx)} className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-300 hover:bg-rose-500/10">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
                       </li>
                     );
                   })}
