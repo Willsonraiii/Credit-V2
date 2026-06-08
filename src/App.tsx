@@ -1112,56 +1112,74 @@ export default function App() {
                     const linkedPaid = creditPaid && !!tx.paidByPaymentId;
                     const secured = isCredit && !!tx.secured && !creditPaid;
                     return (
-                      <li key={tx.id} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${creditPaid ? "bg-[#1155ff]/5" : ""}`}>
-                        <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl ring-1 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
-                          {isCredit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                      <li key={tx.id} className={`group rounded-xl px-3 py-3 hover:bg-white/[0.03] transition-colors ${creditPaid ? "bg-[#1155ff]/5" : ""}`}>
+                        <div className="flex items-start gap-3">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 shrink-0 ${creditPaid ? "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30" : isCredit ? "bg-rose-400/10 text-rose-300 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-blue-500/30"}`}>
+                            {isCredit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white break-words">
+                                  {tx.note || (isCredit ? copy.credit : copy.payment)}
+                                </p>
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isCredit ? "bg-rose-500/10 text-rose-300 ring-1 ring-rose-400/20" : "bg-[#1155ff]/15 text-blue-200 ring-1 ring-blue-500/30"}`}>
+                                    {isCredit ? copy.credit : copy.payment}
+                                  </span>
+                                  {(creditPaid || !isCredit) && <span className="rounded-full bg-[#1155ff]/15 px-2 py-0.5 text-[10px] font-semibold text-blue-200 ring-1 ring-blue-500/30">{copy.paidSign}</span>}
+                                  {secured && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-400/20">{copy.secured}</span>}
+                                </div>
+                              </div>
+                              <p className={`shrink-0 text-sm font-semibold tabular text-right ${creditPaid ? "text-blue-300 line-through decoration-blue-300/60" : isCredit ? "text-rose-300" : "text-blue-300"}`}>
+                                {isCredit ? "+" : "−"}{formatNPR(tx.amount).replace("Rs. ", "")}
+                              </p>
+                            </div>
+
+                            <div className="mt-2 grid grid-cols-1 gap-1 text-[11px] text-white/45 sm:grid-cols-2">
+                              <p>{formatRecordDate(tx.date, language, false)}</p>
+                              <p className="sm:text-right">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white capitalize">
-                            {isCredit ? copy.credit : copy.payment}
-                            {(creditPaid || !isCredit) && <span className="ml-2 rounded-full bg-[#1155ff]/15 px-2 py-0.5 text-[10px] font-semibold text-blue-200 ring-1 ring-blue-500/30">{copy.paidSign}</span>}
-                            {secured && <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-400/20">{copy.secured}</span>}
-                          </p>
-                          <p className="text-xs text-white/50 truncate">{tx.note || "—"} · {formatRecordDate(tx.date, language, true)}</p>
-                          <p className="text-[10px] text-white/35 truncate">{copy.recordBy}: {tx.userCode || copy.oldRecord}</p>
+
+                        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                          {isCredit && (
+                            <button
+                              onClick={() => handleToggleCreditPaid(tx)}
+                              disabled={isPaidBusy || linkedPaid}
+                              className={`inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-[#1155ff]/15 text-blue-200 hover:bg-[#1155ff]/25"}`}
+                              title={creditPaid ? (language === "ne" ? "फेरि उधारो राख्नुहोस्" : "Keep as credit") : (language === "ne" ? "तिरेको चिन्ह लगाउनुहोस्" : "Mark paid")}
+                            >
+                              {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
+                            </button>
+                          )}
+                          {isCredit && !creditPaid && (
+                            <button
+                              onClick={() => handleToggleCreditSecured(tx)}
+                              disabled={isPaidBusy}
+                              className={`inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"}`}
+                              title={secured ? copy.unsecure : copy.secure}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" /> {secured ? copy.unsecure : copy.secure}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setEditTx(tx)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-blue-300 hover:bg-[#1155ff]/15"
+                            title={language === "ne" ? "सम्पादन" : "Edit"}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTx(tx)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-300 hover:bg-rose-500/10"
+                            title={language === "ne" ? "मेटाउनुहोस्" : "Delete"}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
-                        <p className={`text-sm font-semibold tabular ${creditPaid ? "text-blue-300 line-through decoration-blue-300/60" : isCredit ? "text-rose-300" : "text-blue-300"}`}>
-                          {isCredit ? "+" : "−"}{formatNPR(tx.amount).replace("Rs. ", "")}
-                        </p>
-                        {isCredit && (
-                          <button
-                            onClick={() => handleToggleCreditPaid(tx)}
-                            disabled={isPaidBusy || linkedPaid}
-                            className={`opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${creditPaid ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-[#1155ff]/15 text-blue-200 hover:bg-[#1155ff]/25"}`}
-                            title={creditPaid ? (language === "ne" ? "फेरि उधारो राख्नुहोस्" : "Keep as credit") : (language === "ne" ? "तिरेको चिन्ह लगाउनुहोस्" : "Mark paid")}
-                          >
-                            {isPaidBusy ? "..." : linkedPaid ? copy.paidSign : creditPaid ? (language === "ne" ? "उधारो" : "UNPAID") : copy.paidSign}
-                          </button>
-                        )}
-                        {isCredit && !creditPaid && (
-                          <button
-                            onClick={() => handleToggleCreditSecured(tx)}
-                            disabled={isPaidBusy}
-                            className={`opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${secured ? "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"}`}
-                            title={secured ? copy.unsecure : copy.secure}
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5" /> {secured ? copy.unsecure : copy.secure}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setEditTx(tx)}
-                          className="opacity-60 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex h-8 w-8 items-center justify-center rounded-lg text-blue-300 hover:bg-[#1155ff]/15"
-                          title={language === "ne" ? "सम्पादन" : "Edit"}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTx(tx)}
-                          className="opacity-60 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-300 hover:bg-rose-500/10"
-                          title={language === "ne" ? "मेटाउनुहोस्" : "Delete"}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
                       </li>
                     );
                   })}
