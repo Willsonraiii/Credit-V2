@@ -11,15 +11,17 @@ import NepaliDate from "nepali-date-converter";
 import type { Customer, Transaction } from "./types";
 import {
   listenCustomers, listenTransactions,
-  addCustomerFire, addTransactionFire,
-  deleteCustomerFire, deleteTransactionFire,
-  updateCustomerFire, updateTransactionFire,
-  setCreditPaidFire, setCreditSecuredFire,
-  createCloudBackupFire, listCloudBackupsFire, restoreCloudBackupFire,
-  recalculateCustomerBalancesFire,
-  listenPosUsers, savePosUsersFire,
+  addCustomer, addTransaction,
+  deleteCustomer, deleteTransaction,
+  updateCustomer, updateTransaction,
+  setCreditPaid, setCreditSecured,
+  createCloudBackup, listCloudBackups, restoreCloudBackup,
+  recalculateCustomerBalances,
+  listenPosUsers, savePosUsers,
+  setBackend, effectiveBackend, isSupabaseConfigured,
   type CloudBackup,
-} from "./firebase";
+} from "./db";
+import { migrateFirestoreToSupabase } from "./migrate";
 import Login from "./Login";
 import {
   loadUsers, saveUsers, makeUserId,
@@ -83,7 +85,7 @@ const text = {
     amount: "Amount (NPR)",
     note: "Note (optional)",
     saveCredit: "Save Credit",
-    stored: "Data stored securely in Firestore",
+    stored: "Data stored securely in the cloud",
     recentlyCleared: "Cleared This Week",
     reviewWeek: "Available for 1 week review",
     calculation: "Calculation",
@@ -158,7 +160,7 @@ const text = {
     amount: "रकम (NPR)",
     note: "नोट (वैकल्पिक)",
     saveCredit: "उधारो सेभ",
-    stored: "डाटा फायरस्टोरमा सुरक्षित छ",
+    stored: "डाटा क्लाउडमा सुरक्षित छ",
     recentlyCleared: "यो हप्ता सफा भएका",
     reviewWeek: "१ हप्ता समीक्षा गर्न उपलब्ध",
     calculation: "हिसाब",
@@ -254,8 +256,8 @@ function Modal({ open, onClose, title, children, icon }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-[#0f172a] border border-white/10 p-5 sm:p-6 animate-slide-up sm:animate-scale-in">
-        <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="relative z-10 w-full max-w-lg max-h-[92vh] rounded-t-3xl sm:rounded-2xl bg-[#0f172a] border border-white/10 p-5 sm:p-6 animate-slide-up sm:animate-scale-in flex flex-col">
+        <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
           <div className="flex items-center gap-3">
             {icon && (
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#1155ff]/25 to-blue-400/10 ring-1 ring-white/10 text-blue-200">
@@ -268,7 +270,7 @@ function Modal({ open, onClose, title, children, icon }: {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="space-y-4">{children}</div>
+        <div className="space-y-4 overflow-y-auto pr-1">{children}</div>
       </div>
     </div>
   );
@@ -314,6 +316,8 @@ export default function App() {
   const [showRestoreBackup, setShowRestoreBackup] = useState(false);
   const [cloudBackups, setCloudBackups] = useState<CloudBackup[]>([]);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationLog, setMigrationLog] = useState<string[]>([]);
   const [paidBusyIds, setPaidBusyIds] = useState<Set<string>>(() => new Set());
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
@@ -403,12 +407,12 @@ export default function App() {
     };
   }, [activeUser]);
 
-  // Firestore listeners
+  // Data listeners
   useEffect(() => {
     setLoading(true);
     const unsubC = listenCustomers(
       (data) => { setCustomers(data); setLoading(false); setError(null); },
-      (err) => { console.error(err); setError("Failed to load customers. Check your Firebase config."); setLoading(false); },
+      (err) => { console.error(err); setError("Failed to load customers. Check your data connection."); setLoading(false); },
     );
     const unsubT = listenTransactions(
       (data) => { setTransactions(data); },
@@ -605,21 +609,21 @@ export default function App() {
   // ─── Actions ─────────────────────────────────────────────────
   const handleAddCustomer = async (data: { name: string; phone?: string; address?: string }) => {
     try {
-      await addCustomerFire({ ...data, userCode: staffCode });
+      await addCustomer({ ...data, userCode: staffCode });
       notify("Customer added ✓");
     } catch (e) { console.error(e); notify("Failed to add customer"); }
   };
 
   const handleEditCustomer = async (id: string, data: { name: string; phone?: string; address?: string }) => {
     try {
-      await updateCustomerFire(id, data);
+      await updateCustomer(id, data);
       notify("Customer updated ✓");
     } catch (e) { console.error(e); notify("Failed to update"); }
   };
 
   const handleEditTx = async (id: string, data: { amount: number; note?: string }) => {
     try {
-      await updateTransactionFire(id, data);
+      await updateTransaction(id, data);
       notify("Transaction updated ✓");
     } catch (e) { console.error(e); notify("Failed to update"); }
   };
@@ -636,7 +640,7 @@ export default function App() {
     if (paidBusyIds.has(tx.id)) return;
     setPaidBusyIds((current) => new Set(current).add(tx.id));
     try {
-      await setCreditPaidFire(tx.id, !tx.paid, staffCode);
+      await setCreditPaid(tx.id, !tx.paid, staffCode);
       notify(!tx.paid ? "Credit item marked PAID ✓" : "Credit item kept as credit ✓");
     } catch (e) { console.error(e); notify("Failed to update paid status"); }
     finally {
@@ -653,7 +657,7 @@ export default function App() {
     if (paidBusyIds.has(tx.id)) return;
     setPaidBusyIds((current) => new Set(current).add(tx.id));
     try {
-      await setCreditSecuredFire(tx.id, !tx.secured, staffCode);
+      await setCreditSecured(tx.id, !tx.secured, staffCode);
       notify(!tx.secured ? "Credit item secured ✓" : "Credit item unsecured ✓");
     } catch (e) { console.error(e); notify("Failed to update secure status"); }
     finally {
@@ -670,8 +674,8 @@ export default function App() {
     try {
       // Delete all transactions for this customer
       const txs = transactions.filter((t) => t.customerId === c.id);
-      await Promise.all(txs.map((t) => deleteTransactionFire(t.id)));
-      await deleteCustomerFire(c.id);
+      await Promise.all(txs.map((t) => deleteTransaction(t.id)));
+      await deleteCustomer(c.id);
       if (view.customerId === c.id) setView({ tab: "dashboard", customerId: null });
       notify("Customer deleted ✓");
     } catch (e) { console.error(e); notify("Failed to delete"); }
@@ -679,7 +683,7 @@ export default function App() {
 
   const handleDeleteTx = async (tx: Transaction) => {
     if (!confirm("Delete this transaction?")) return;
-    try { await deleteTransactionFire(tx.id); notify("Transaction deleted ✓"); }
+    try { await deleteTransaction(tx.id); notify("Transaction deleted ✓"); }
     catch (e) { console.error(e); notify("Failed to delete"); }
   };
 
@@ -697,7 +701,7 @@ export default function App() {
     );
     if (!ok) return;
     try {
-      await deleteTransactionFire(latest.id);
+      await deleteTransaction(latest.id);
       notify(language === "ne" ? "Undo भयो ✓" : "Undo complete ✓");
     } catch (e) {
       console.error(e);
@@ -708,7 +712,7 @@ export default function App() {
   const handleAddTx = async (type: "credit" | "payment", amount: number, note?: string) => {
     if (!selectedCustomer) return;
     try {
-      await addTransactionFire({ customerId: selectedCustomer.id, type, amount, note, userCode: staffCode });
+      await addTransaction({ customerId: selectedCustomer.id, type, amount, note, userCode: staffCode });
       notify(type === "credit" ? "Credit recorded ✓" : "Payment recorded ✓");
     } catch (e) { console.error(e); notify("Failed to record"); }
   };
@@ -734,7 +738,7 @@ export default function App() {
   const handleCreateCloudBackup = async () => {
     setBackupBusy(true);
     try {
-      await createCloudBackupFire(staffCode, "Manual backup");
+      await createCloudBackup(staffCode, "Manual backup");
       notify(language === "ne" ? "क्लाउड ब्याकअप भयो ✓" : "Cloud backup created ✓");
     } catch (e) {
       console.error(e);
@@ -747,7 +751,7 @@ export default function App() {
   const openRestoreBackups = async () => {
     setBackupBusy(true);
     try {
-      const backups = await listCloudBackupsFire();
+      const backups = await listCloudBackups();
       setCloudBackups(backups);
       setShowRestoreBackup(true);
     } catch (e) {
@@ -767,7 +771,7 @@ export default function App() {
     if (!ok) return;
     setBackupBusy(true);
     try {
-      await restoreCloudBackupFire(backupId, staffCode);
+      await restoreCloudBackup(backupId, staffCode);
       notify(language === "ne" ? "Restore भयो ✓" : "Backup restored ✓");
       setShowRestoreBackup(false);
     } catch (e) {
@@ -787,13 +791,53 @@ export default function App() {
     if (!ok) return;
     setBackupBusy(true);
     try {
-      await recalculateCustomerBalancesFire();
+      await recalculateCustomerBalances();
       notify(language === "ne" ? "Balance मिल्यो ✓" : "Balances repaired ✓");
     } catch (e) {
       console.error(e);
       notify(language === "ne" ? "Balance repair असफल भयो" : "Balance repair failed");
     } finally {
       setBackupBusy(false);
+    }
+  };
+
+  const handleMigrateToSupabase = async () => {
+    if (!isSupabaseConfigured()) {
+      notify(
+        language === "ne"
+          ? "Supabase सेट छैन। VITE_SUPABASE_URL र VITE_SUPABASE_ANON_KEY राख्नुहोस्।"
+          : "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then rebuild.",
+      );
+      return;
+    }
+    const ok = confirm(
+      language === "ne"
+        ? "Firebase बाट Supabase मा सबै डाटा सार्ने? तपाईंको Firebase डाटा परिवर्तन हुँदैन। जारी राख्ने?"
+        : "Copy all data from Firebase to Supabase? Your existing Firebase data is not changed. Continue?",
+    );
+    if (!ok) return;
+    setMigrating(true);
+    setMigrationLog([]);
+    try {
+      const result = await migrateFirestoreToSupabase((msg) =>
+        setMigrationLog((current) => [...current, msg]),
+      );
+      setBackend("supabase");
+      notify(
+        language === "ne"
+          ? `सफल भयो ✓ (${result.customers} ग्राहक, ${result.transactions} कारोबार)। रिलोड हुँदैछ…`
+          : `Migrated ✓ (${result.customers} customers, ${result.transactions} transactions). Reloading…`,
+      );
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      console.error(e);
+      notify(language === "ne" ? "Migration असफल भयो" : "Migration failed");
+      setMigrationLog((current) => [
+        ...current,
+        e instanceof Error ? e.message : String(e),
+      ]);
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -808,7 +852,7 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center bg-[#020617]">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 text-[#1155ff] animate-spin mx-auto" />
-          <p className="text-white/60 text-sm">Loading from Firebase...</p>
+          <p className="text-white/60 text-sm">Loading data…</p>
         </div>
       </div>
     );
@@ -822,7 +866,7 @@ export default function App() {
           <p className="text-white text-lg font-semibold">Connection Error</p>
           <p className="text-white/60 text-sm">{error}</p>
           <p className="text-white/40 text-xs mt-2">
-            Edit <code className="bg-white/10 px-1.5 py-0.5 rounded">src/firebase.ts</code> with your Firebase config
+            Check your Supabase/Firebase configuration (<code className="bg-white/10 px-1.5 py-0.5 rounded">.env</code>)
           </p>
           <button onClick={() => window.location.reload()} className={btnPrimary}>Retry</button>
         </div>
@@ -1636,6 +1680,72 @@ export default function App() {
           </div>
         </div>
 
+        {/* Data backend + one-time migration */}
+        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+          <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
+            {language === "ne" ? "डाटा ब्याकइन्ड" : "Data Backend"}
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-white/80">
+              {effectiveBackend() === "supabase" ? "Supabase" : "Firebase"}
+            </span>
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
+                effectiveBackend() === "supabase"
+                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-400/30"
+                  : "bg-amber-500/15 text-amber-300 border-amber-400/30",
+              )}
+            >
+              {effectiveBackend() === "supabase"
+                ? language === "ne" ? "सक्रिय" : "ACTIVE"
+                : language === "ne" ? "हालको" : "CURRENT"}
+            </span>
+          </div>
+
+          {effectiveBackend() === "firebase" && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-white/50">
+                {language === "ne"
+                  ? "Firebase बाट Supabase मा एक क्लिकमा सार्नुहोस्। तपाईंको हालको डाटा जस्ताको तस्तै कपी हुन्छ।"
+                  : "One-click switch from Firebase to Supabase. Your current data is copied over unchanged."}
+              </p>
+              <button
+                onClick={handleMigrateToSupabase}
+                disabled={migrating || backupBusy || !isAdmin}
+                className={cn(btnPrimary, "w-full disabled:opacity-40 disabled:cursor-not-allowed")}
+              >
+                {migrating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowLeft className="h-4 w-4" />
+                )}
+                {migrating
+                  ? language === "ne" ? "सार्दैछ…" : "Migrating…"
+                  : language === "ne" ? "Supabase मा सार्नुहोस्" : "Migrate to Supabase"}
+              </button>
+              {!isAdmin && (
+                <p className="text-[11px] text-white/35 text-center">
+                  {language === "ne" ? "Migration एडमिनको लागि मात्र।" : "Migration is admin-only."}
+                </p>
+              )}
+              {migrationLog.length > 0 && (
+                <pre className="max-h-40 overflow-y-auto rounded-xl bg-black/30 border border-white/10 p-3 text-[11px] leading-relaxed text-white/60 whitespace-pre-wrap">
+                  {migrationLog.join("\n")}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {effectiveBackend() === "supabase" && (
+            <p className="mt-2 text-xs text-white/50">
+              {language === "ne"
+                ? "यो एप अब Supabase मा चलिरहेको छ।"
+                : "This app is now running on Supabase."}
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
           <button
             onClick={() => setLanguage(language === "en" ? "ne" : "en")}
@@ -1650,12 +1760,12 @@ export default function App() {
 
         <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
           <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
-            {language === "ne" ? "क्लाउड ब्याकअप (फायरबेस)" : "Cloud Backup (Firebase)"}
+            {language === "ne" ? "क्लाउड ब्याकअप" : "Cloud Backup"}
           </p>
           <p className="text-xs text-white/50">
             {language === "ne"
-              ? "तपाईंले सेट गरेको फायरबेस प्रोजेक्टमा सबै ग्राहक र कारोबार स्वचालित रूपमा बचत गरिन्छ।"
-              : "All customers and transactions are saved automatically to your configured Firebase project."}
+              ? "सबै ग्राहक र कारोबार तपाईंको डाटा ब्याकइन्डमा स्वचालित रूपमा बचत गरिन्छ।"
+              : "All customers and transactions are saved automatically to your data backend."}
           </p>
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button onClick={handleCreateCloudBackup} disabled={backupBusy} className={cn(btnGhost, "disabled:opacity-40 disabled:cursor-not-allowed")}>
@@ -1671,7 +1781,7 @@ export default function App() {
             </p>
           )}
           <p className="text-[11px] text-white/40 mt-2 text-center">
-            <code className="bg-white/10 px-1.5 py-0.5 rounded">src/firebase.ts</code>
+            <code className="bg-white/10 px-1.5 py-0.5 rounded">src/db.ts</code>
           </p>
         </div>
 
@@ -1720,7 +1830,7 @@ export default function App() {
           setUsers(next);
           saveUsers(next);
           try {
-            await savePosUsersFire(next);
+            await savePosUsers(next);
             notify(language === "ne" ? "सुरक्षित ✓" : "Saved ✓");
           } catch (e) {
             console.error(e);
