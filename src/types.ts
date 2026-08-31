@@ -1,4 +1,10 @@
-import type { Timestamp } from "./firebase";
+// Timestamps are represented uniformly as "seconds since the Unix epoch"
+// (matching the `.seconds` property the UI already relies on). Both the
+// Firebase and Supabase data layers convert their native date types to this
+// shape, so the rest of the app is backend-agnostic.
+export interface Timestamp {
+  seconds: number;
+}
 
 export interface Customer {
   id: string;
@@ -25,4 +31,14 @@ export interface Transaction {
   appliedToCreditIds?: string[];
   secured?: boolean;
   securedBy?: string | null;
+}
+
+export interface CloudBackup {
+  id: string;
+  createdAt: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  label: string | null;
+  customerCount: number;
+  transactionCount: number;
 }
