@@ -15,8 +15,12 @@ export { isSupabaseConfigured } from "./supabase";
 
 const BACKEND_KEY = "yalambar_backend_v1";
 
+/**
+ * Supabase is the default for every device. A stored Firebase value remains
+ * an explicit opt-out so a recovery path is available if it is ever needed.
+ */
 export function getBackend(): Backend {
-  return localStorage.getItem(BACKEND_KEY) === "supabase" ? "supabase" : "firebase";
+  return localStorage.getItem(BACKEND_KEY) === "firebase" ? "firebase" : "supabase";
 }
 
 export function setBackend(backend: Backend) {
