@@ -28,12 +28,9 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Never cache backend API calls (Firebase/Google or Supabase). This prevents
-  // deleted or edited records from reappearing because of stale cache.
+  // Never cache backend API calls (Supabase). This prevents deleted or edited
+  // records from reappearing because of stale cache.
   if (
-    url.hostname.includes("firebase") ||
-    url.hostname.includes("firestore.googleapis.com") ||
-    url.hostname.includes("googleapis.com") ||
     url.hostname.includes("supabase.co") ||
     url.hostname.includes("supabase.com")
   ) {
