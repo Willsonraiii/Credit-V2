@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Receipt, MapPin,
   Phone, Search, Plus, TrendingUp, TrendingDown,
   Trash2, X, ArrowLeft, HandCoins,
-  Eye, Download, RotateCcw, Loader2, WifiOff,
+  Eye, Download, RotateCcw, WifiOff,
   Clock3, KeyRound, Languages, Settings,
   ShieldCheck, LogOut, Pencil, UserPlus,
 } from "lucide-react";
@@ -241,10 +241,22 @@ const inputClass =
   "w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all text-sm";
 
 const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1155ff] via-[#2f6bff] to-[#0ea5e9] animated-gradient bg-[length:200%_auto] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-700/40 ring-1 ring-white/15 hover:shadow-blue-500/50 hover:brightness-110 transition-all hover:scale-[1.02] active:scale-[0.97]";
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1155ff] via-[#2f6bff] to-[#0ea5e9] animated-gradient bg-[length:200%_auto] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-700/40 ring-1 ring-white/15 hover:shadow-blue-500/60 hover:brightness-110 transition-all hover:scale-[1.02] active:scale-[0.97] btn-shine";
 
 const btnGhost =
   "inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.04] border border-white/10 px-4 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm hover:bg-white/10 hover:text-white hover:border-white/20 transition-all active:scale-[0.98]";
+
+// ─── Ambient background ────────────────────────────────────────
+function AuroraBackground() {
+  return (
+    <div className="aurora" aria-hidden="true">
+      <div className="orb orb-1" />
+      <div className="orb orb-2" />
+      <div className="orb orb-3" />
+      <div className="bg-grid" />
+    </div>
+  );
+}
 
 // ─── Modal ─────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, icon }: {
@@ -253,18 +265,19 @@ function Modal({ open, onClose, title, children, icon }: {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg max-h-[92vh] rounded-t-3xl sm:rounded-2xl bg-[#0f172a] border border-white/10 p-5 sm:p-6 animate-slide-up sm:animate-scale-in flex flex-col">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md animate-fade-in" onClick={onClose} />
+      <div className="glass-premium relative z-10 w-full max-w-lg max-h-[92vh] rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 animate-slide-up-spring sm:animate-scale-in-spring flex flex-col">
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/15 sm:hidden" />
         <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
           <div className="flex items-center gap-3">
             {icon && (
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#1155ff]/25 to-blue-400/10 ring-1 ring-white/10 text-blue-200">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#1155ff]/25 to-blue-400/10 ring-1 ring-white/10 text-blue-200 shadow-lg shadow-blue-900/40">
                 {icon}
               </div>
             )}
-            <h3 className="text-lg font-semibold text-white">{title}</h3>
+            <h3 className="font-display text-lg font-bold text-white">{title}</h3>
           </div>
-          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white transition-colors">
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 hover:text-white hover:rotate-90 transition-all duration-300">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -797,6 +810,13 @@ export default function App() {
     }
   };
 
+  // ─── Navigation tabs (shared by desktop top bar + mobile dock) ──
+  const navTabs = [
+    ["dashboard", LayoutDashboard, copy.dashboard] as const,
+    ["customers", Users, copy.customers] as const,
+    ["transactions", Receipt, copy.transactions] as const,
+  ];
+
   // ─── Render ──────────────────────────────────────────────────
   // POS login gate — must pick a user + enter PIN before using the app
   if (!activeUser) {
@@ -805,10 +825,22 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-10 w-10 text-[#1155ff] animate-spin mx-auto" />
-          <p className="text-white/60 text-sm">Loading data…</p>
+      <div className="min-h-screen relative flex items-center justify-center bg-transparent p-6">
+        <AuroraBackground />
+        <div className="text-center space-y-6 animate-fade-up">
+          <div className="relative mx-auto w-fit">
+            <div className="absolute -inset-4 rounded-[2rem] bg-[#1155ff]/25 blur-2xl animate-pulse-glow" />
+            <img src={LOGO_SRC} alt="Yalambar Store" className="relative h-20 w-20 rounded-2xl object-contain bg-black/40 ring-1 ring-white/10 shadow-lg shadow-blue-700/30 animate-float" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="font-display text-base font-bold text-white">Yalambar Store</p>
+            <p className="text-white/50 text-sm">Loading data…</p>
+          </div>
+          <div className="mx-auto w-48 space-y-2">
+            <div className="skeleton h-2.5 rounded-full" />
+            <div className="skeleton h-2.5 w-3/4 mx-auto rounded-full" />
+            <div className="skeleton h-2.5 w-1/2 mx-auto rounded-full" />
+          </div>
         </div>
       </div>
     );
@@ -816,8 +848,9 @@ export default function App() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020617] p-6">
-        <div className="text-center space-y-4 glass rounded-2xl p-8 max-w-md">
+      <div className="min-h-screen relative flex items-center justify-center bg-transparent p-6">
+        <AuroraBackground />
+        <div className="relative text-center space-y-4 glass rounded-2xl p-8 max-w-md animate-scale-in-spring">
           <WifiOff className="h-10 w-10 text-rose-400 mx-auto" />
           <p className="text-white text-lg font-semibold">Connection Error</p>
           <p className="text-white/60 text-sm">{error}</p>
@@ -831,17 +864,20 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617]">
+    <div className="min-h-screen relative bg-transparent">
+      <AuroraBackground />
+
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-[200] toast glass rounded-xl px-4 py-3 text-sm text-white font-medium shadow-xl">
+        <div className="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 z-[200] mx-auto sm:mx-0 w-fit max-w-[92vw] sm:max-w-md animate-toast glass-premium rounded-2xl px-4 py-3 text-sm text-white font-medium shadow-2xl flex items-center gap-2.5">
+          <span className="h-2 w-2 rounded-full bg-gradient-to-r from-[#1155ff] to-sky-400 animate-pulse shrink-0" />
           {toast}
         </div>
       )}
 
       {/* Top Bar */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-black/80 border-b border-white/5">
-        <div className="mx-auto max-w-6xl px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
+      <header className="sticky top-0 z-40 backdrop-blur-2xl bg-black/70 border-b border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+        <div className="mx-auto max-w-7xl px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/15 shadow-lg shadow-blue-900/30" />
             <div className="leading-tight">
@@ -890,29 +926,25 @@ export default function App() {
           <span className="text-[10px] text-white/45 truncate max-w-[45%] text-right">{formatLiveDate(now, language)}</span>
         </div>
 
-        {/* Tab bar */}
-        <div className="mx-auto max-w-6xl px-1 sm:px-6">
-          <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar px-1 pb-1.5">
-            {([
-              ["dashboard", LayoutDashboard, copy.dashboard],
-              ["customers", Users, copy.customers],
-              ["transactions", Receipt, copy.transactions],
-            ] as const).map(([id, Icon, label]) => {
+        {/* Tab bar (desktop) */}
+        <div className="hidden md:block mx-auto max-w-7xl px-6">
+          <nav className="flex items-center gap-1 px-1 pb-2">
+            {navTabs.map(([id, Icon, label]) => {
               const active = view.tab === id;
               return (
                 <button
                   key={id}
                   onClick={() => navGo(id)}
-                  className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                  className={`relative inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                     active
-                      ? "text-white bg-gradient-to-r from-[#1155ff]/25 via-[#2f6bff]/15 to-transparent ring-1 ring-[#1155ff]/40 shadow-lg shadow-blue-900/30"
-                      : "text-white/50 hover:text-white/85 hover:bg-white/[0.04]"
+                      ? "text-white bg-gradient-to-r from-[#1155ff]/30 via-[#2f6bff]/20 to-transparent ring-1 ring-[#1155ff]/40 shadow-lg shadow-blue-900/40"
+                      : "text-white/50 hover:text-white/85 hover:bg-white/[0.05]"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 transition-colors ${active ? "text-blue-300" : ""}`} />
+                  <Icon className={`h-4 w-4 transition-all duration-300 ${active ? "text-blue-300 scale-110" : ""}`} />
                   {label}
                   {active && (
-                    <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-[#1155ff] via-blue-400 to-white/70 animated-gradient" />
+                    <span className="absolute inset-x-4 -bottom-[7px] h-[2px] rounded-full bg-gradient-to-r from-transparent via-blue-400 to-transparent animated-gradient" />
                   )}
                 </button>
               );
@@ -922,14 +954,14 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="mx-auto max-w-6xl px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-5">
         {/* Store header - always visible */}
         <div className="glass rounded-2xl p-4 sm:p-5 relative overflow-hidden animate-fade-up">
           <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-gradient-to-br from-[#1155ff]/25 to-blue-400/5 blur-2xl" />
           <div className="relative flex items-center gap-3 sm:gap-4">
             <img src={LOGO_SRC} alt="Yalambar Store logo" className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-contain bg-black/35 ring-1 ring-white/10 shadow-lg shadow-blue-700/20 animate-float" />
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+              <h1 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-shimmer">
                 {storeInfo.name}
               </h1>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs sm:text-sm text-white/60">
@@ -1102,7 +1134,7 @@ export default function App() {
               </div>
               {customerTxs.length === 0 ? (
                 <div className="py-10 text-center">
-                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-2xl">📒</div>
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-2xl animate-float-slow">📒</div>
                   <p className="text-sm text-white/80">No transactions yet</p>
                 </div>
               ) : (
@@ -1203,13 +1235,13 @@ export default function App() {
                 };
                 const toneStr: string = tone;
                 return (
-                  <div key={i} className="glass rounded-2xl p-4 relative overflow-hidden transition-all hover:-translate-y-0.5 hover:bg-white/[0.07]">
+                  <div key={i} className="glass card-lift rounded-2xl p-4 sm:p-5 relative overflow-hidden group">
                     <div className={`absolute inset-x-0 -top-20 h-32 bg-gradient-to-b blur-2xl opacity-60 ${tones[toneStr]}`} />
                     <div className="relative">
                       <p className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/50">{label}</p>
-                      <p className="mt-2 text-xl sm:text-2xl font-semibold tabular text-white">{value}</p>
+                      <p className="font-display mt-2 text-xl sm:text-2xl font-bold tabular text-white">{value}</p>
                     </div>
-                    <div className={`absolute bottom-3 right-3 flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br ring-1 ${tones[toneStr]}`}>
+                    <div className={`absolute bottom-3 right-3 flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br ring-1 transition-transform duration-300 group-hover:scale-110 ${tones[toneStr]}`}>
                       {icon}
                     </div>
                   </div>
@@ -1351,7 +1383,7 @@ export default function App() {
 
             {filteredCustomers.length === 0 ? (
               <div className="glass rounded-2xl p-10 text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-2xl">👤</div>
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-2xl animate-float-slow">👤</div>
                 <p className="text-sm text-white/80">{language === "ne" ? "ग्राहक भेटिएन" : "No customers found"}</p>
                 <p className="text-xs text-white/40 mt-1">{searchQ ? (language === "ne" ? "अर्को खोज प्रयास गर्नुहोस्" : "Try a different search") : (language === "ne" ? "नयाँ ग्राहक थप्नुहोस्" : "Tap Add to create one")}</p>
               </div>
@@ -1363,7 +1395,7 @@ export default function App() {
                     ? Math.max(0, 7 - Math.floor((Date.now() - (c.latestPayment.date?.seconds ?? 0) * 1000) / 86400000))
                     : 0;
                   return (
-                  <div key={c.id} className={`glass rounded-2xl p-4 hover:border-blue-500/30 hover:-translate-y-0.5 transition-all duration-300 ${isRecentlyCleared ? "border-[#1155ff]/25" : ""}`}>
+                  <div key={c.id} className={`glass card-lift rounded-2xl p-4 ${isRecentlyCleared ? "border-[#1155ff]/25" : ""}`}>
                     <div className="flex items-start gap-3">
                       <Avatar name={c.name} size={40} />
                       <div className="flex-1 min-w-0">
@@ -1589,6 +1621,34 @@ export default function App() {
         <p>Yalambar Store · Daily Credit Tracker - V3</p>
         <p className="mt-1">{copy.stored}</p>
       </footer>
+
+      {/* Mobile navigation dock */}
+      <nav className="fixed inset-x-0 bottom-0 z-[45] md:hidden" aria-label="Primary">
+        <div className="glass-premium mx-auto mb-safe flex w-[min(26rem,calc(100%-1.25rem))] items-center justify-between gap-1 rounded-3xl p-1.5">
+          {navTabs.map(([id, Icon, label]) => {
+            const active = view.tab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => navGo(id)}
+                className={`relative flex flex-1 flex-col items-center gap-0.5 rounded-2xl px-2 py-2 transition-all duration-300 ${
+                  active
+                    ? "bg-gradient-to-b from-[#1155ff]/35 to-[#1155ff]/10 ring-1 ring-[#1155ff]/45 shadow-lg shadow-blue-900/50"
+                    : "hover:bg-white/[0.05]"
+                }`}
+              >
+                <Icon className={`h-[1.15rem] w-[1.15rem] transition-all duration-300 ${active ? "text-blue-200 scale-110" : "text-white/50"}`} />
+                <span className={`text-[10px] font-semibold leading-none transition-colors ${active ? "text-blue-100" : "text-white/45"}`}>
+                  {label}
+                </span>
+                {active && (
+                  <span className="absolute -top-px h-[2px] w-8 rounded-full bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       {/* Modals */}
       <AddCustomerModal open={showAddCustomer} onClose={() => setShowAddCustomer(false)} onSubmit={handleAddCustomer} copy={copy} />
