@@ -163,7 +163,12 @@ export function listenCustomers(
       .catch(onError);
   };
   load();
-  return startLiveListener("customers", load);
+  const unregister = registerRefresh(load);
+  const unsubscribe = startLiveListener("customers", load);
+  return () => {
+    unregister();
+    unsubscribe();
+  };
 }
 
 export function listenTransactions(
@@ -181,7 +186,12 @@ export function listenTransactions(
       .catch(onError);
   };
   load();
-  return startLiveListener("transactions", load);
+  const unregister = registerRefresh(load);
+  const unsubscribe = startLiveListener("transactions", load);
+  return () => {
+    unregister();
+    unsubscribe();
+  };
 }
 
 export function listenPosUsers(
@@ -204,7 +214,12 @@ export function listenPosUsers(
       .catch(onError);
   };
   load();
-  return startLiveListener("pos_users", load);
+  const unregister = registerRefresh(load);
+  const unsubscribe = startLiveListener("pos_users", load);
+  return () => {
+    unregister();
+    unsubscribe();
+  };
 }
 
 export async function savePosUsers(users: PosUser[]) {
@@ -221,30 +236,63 @@ export async function savePosUsers(users: PosUser[]) {
     );
     if (error) throw error;
   }
+  refreshAll();
 }
 
-// ─── Balance helper (atomic via schema.sql RPC, with fallback) ──
+// ─── Live-refresh hook ─────────────────────────────────────────
+// Write operations call refreshAll() afterwards so every listener reloads
+// immediately — no waiting for realtime or the polling fallback.
 
-async function incrementBalance(customerId: string, delta: number) {
-  const { error } = await supabase.rpc("increment_customer_balance", {
+const refreshHooks = new Set<() => void>();
+
+function registerRefresh(hook: () => void): () => void {
+  refreshHooks.add(hook);
+  return () => {
+    refreshHooks.delete(hook);
+  };
+}
+
+export function refreshAll() {
+  refreshHooks.forEach((hook) => {
+    try {
+      hook();
+    } catch {
+      /* ignore individual reload errors */
+    }
+  });
+}
+
+// ─── Balance helper (atomic, via supabase/functions.sql) ───────
+// Balance is always recomputed from the transactions table, so it can never
+// drift no matter how many devices write at once. Falls back to an equivalent
+// client-side recompute if the SQL functions haven't been installed yet.
+
+function isMissingFunction(err: unknown): boolean {
+  return /could not find the function/i.test(String((err as { message?: string })?.message ?? ""));
+}
+
+async function recomputeBalance(customerId: string) {
+  const { error } = await supabase.rpc("set_customer_balance_from_transactions", {
     p_customer_id: customerId,
-    p_delta: delta,
   });
   if (!error) return;
+  if (!isMissingFunction(error)) throw error;
 
-  // Fallback for when the schema.sql RPC hasn't been installed yet.
-  if (!/could not find the function/i.test(String(error?.message ?? ""))) throw error;
+  // Fallback: recompute client-side (same formula as the SQL function).
   const { data, error: readErr } = await supabase
-    .from("customers")
-    .select("balance")
-    .eq("id", customerId)
-    .maybeSingle();
+    .from("transactions")
+    .select("type, amount, paid, applied_to_credit_ids")
+    .eq("customer_id", customerId);
   if (readErr) throw readErr;
-  const next = Number(data?.balance ?? 0) + delta;
-  const { error: writeErr } = await supabase
-    .from("customers")
-    .update({ balance: next })
-    .eq("id", customerId);
+  const balance = (data ?? []).reduce((sum, t) => {
+    if (normalizeType(t.type) === "credit") {
+      return sum + (t.paid ? 0 : Number(t.amount ?? 0));
+    }
+    const applied =
+      Array.isArray(t.applied_to_credit_ids) && (t.applied_to_credit_ids as unknown[]).length > 0;
+    return sum - (applied ? 0 : Number(t.amount ?? 0));
+  }, 0);
+  const { error: writeErr } = await supabase.from("customers").update({ balance }).eq("id", customerId);
   if (writeErr) throw writeErr;
 }
 
@@ -279,6 +327,7 @@ export async function addCustomer(data: {
     user_code: userCode,
   });
   if (error) throw error;
+  refreshAll();
 }
 
 export async function addTransaction(data: {
@@ -359,7 +408,9 @@ export async function addTransaction(data: {
     if (error) throw error;
   }
 
-  await incrementBalance(data.customerId, data.type === "credit" ? amount : -amount);
+  // Recompute (not increment) so the balance is always exact.
+  await recomputeBalance(data.customerId);
+  refreshAll();
 }
 
 export async function updateCustomer(
@@ -384,38 +435,29 @@ export async function updateTransaction(
 ) {
   const { data: rows, error } = await supabase
     .from("transactions")
-    .select("*")
+    .select("customer_id")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
   const old = rows as Row | null;
   if (!old) return;
 
-  const oldType = normalizeType(old.type);
-  const oldAmount = Number(old.amount ?? 0);
-  const oldPaid = Boolean(old.paid);
   const payload: Record<string, unknown> = {};
-  const nextType = data.type ?? oldType;
-  const nextAmount = data.amount !== undefined ? Math.max(0, Math.round(data.amount)) : oldAmount;
-
-  if (data.amount !== undefined) payload.amount = nextAmount;
+  if (data.amount !== undefined) payload.amount = Math.max(0, Math.round(data.amount));
   if (data.note !== undefined) {
     payload.note = data.note?.trim() || null;
     payload.description = data.note?.trim() || "";
   }
   if (data.type !== undefined) payload.type = data.type === "payment" ? "payment" : "credit";
 
+  const { error: updateErr } = await supabase.from("transactions").update(payload).eq("id", id);
+  if (updateErr) throw updateErr;
+
+  // Recompute the balance from scratch — this handles every case (type or
+  // amount changes, paid state) without fragile delta arithmetic.
   const customerId = String(old.customer_id || "");
-  if (customerId) {
-    const oldSigned = oldType === "credit" ? (oldPaid ? 0 : oldAmount) : -oldAmount;
-    const nextSigned = nextType === "credit" ? (oldPaid ? 0 : nextAmount) : -nextAmount;
-    const { error: updateErr } = await supabase.from("transactions").update(payload).eq("id", id);
-    if (updateErr) throw updateErr;
-    await incrementBalance(customerId, nextSigned - oldSigned);
-  } else {
-    const { error: updateErr } = await supabase.from("transactions").update(payload).eq("id", id);
-    if (updateErr) throw updateErr;
-  }
+  if (customerId) await recomputeBalance(customerId);
+  refreshAll();
 }
 
 export async function setCreditPaid(id: string, paid: boolean, userCode?: string) {
@@ -423,12 +465,28 @@ export async function setCreditPaid(id: string, paid: boolean, userCode?: string
   const userName = displayNameFromCode(cleanUser || undefined);
   const now = new Date().toISOString();
 
-  const { data: rows, error } = await supabase
+  // Atomic toggle + balance fix (see supabase/functions.sql). This is what
+  // prevents the "keeps adding" drift when toggling PAID/UNPAID repeatedly.
+  const { error } = await supabase.rpc("toggle_credit_paid", {
+    p_tx_id: id,
+    p_paid: paid,
+    p_user: cleanUser?.toLowerCase() || null,
+    p_user_name: userName,
+    p_now: now,
+  });
+  if (!error) {
+    refreshAll();
+    return;
+  }
+  if (!isMissingFunction(error)) throw error;
+
+  // Fallback for when the SQL functions haven't been installed yet.
+  const { data: rows, error: readErr } = await supabase
     .from("transactions")
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) throw error;
+  if (readErr) throw readErr;
   const raw = rows as Row | null;
   if (!raw) return;
   if (normalizeType(raw.type) !== "credit") return;
@@ -437,7 +495,6 @@ export async function setCreditPaid(id: string, paid: boolean, userCode?: string
   if (currentPaid === paid) return;
   if (currentPaid && raw.paid_by_payment_id && !paid) return;
 
-  const amount = Number(raw.amount ?? 0);
   const customerId = String(raw.customer_id || "");
 
   const { error: updateErr } = await supabase
@@ -451,7 +508,8 @@ export async function setCreditPaid(id: string, paid: boolean, userCode?: string
     .eq("id", id);
   if (updateErr) throw updateErr;
 
-  if (customerId) await incrementBalance(customerId, paid ? -amount : amount);
+  if (customerId) await recomputeBalance(customerId);
+  refreshAll();
 }
 
 export async function setCreditSecured(id: string, secured: boolean, userCode?: string) {
@@ -481,31 +539,58 @@ export async function setCreditSecured(id: string, secured: boolean, userCode?: 
     })
     .eq("id", id);
   if (updateErr) throw updateErr;
+  refreshAll();
 }
 
 export async function deleteCustomer(id: string) {
   const { error } = await supabase.from("customers").delete().eq("id", id);
   if (error) throw error;
+  refreshAll();
 }
 
 export async function deleteTransaction(id: string) {
-  const { data: rows, error } = await supabase
+  // Atomic delete + un-apply of any credits the payment had settled
+  // (see supabase/functions.sql).
+  const { error } = await supabase.rpc("delete_transaction_fix", { p_tx_id: id });
+  if (!error) {
+    refreshAll();
+    return;
+  }
+  if (!isMissingFunction(error)) throw error;
+
+  // Fallback for when the SQL functions haven't been installed yet.
+  const { data: rows, error: readErr } = await supabase
     .from("transactions")
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) throw error;
+  if (readErr) throw readErr;
   const raw = rows as Row | null;
+  if (!raw) return;
+
+  const customerId = raw.customer_id != null ? String(raw.customer_id) : "";
+
+  if (normalizeType(raw.type) === "payment" && customerId) {
+    // Un-mark credits that this payment had settled.
+    const { error: unapplyErr } = await supabase
+      .from("transactions")
+      .update({
+        paid: false,
+        paid_at: null,
+        paid_by: null,
+        paid_by_name: null,
+        paid_by_payment_id: null,
+      })
+      .eq("customer_id", customerId)
+      .eq("paid_by_payment_id", id);
+    if (unapplyErr) throw unapplyErr;
+  }
 
   const { error: delErr } = await supabase.from("transactions").delete().eq("id", id);
   if (delErr) throw delErr;
 
-  if (raw?.customer_id) {
-    const type = normalizeType(raw.type);
-    const amount = Number(raw.amount ?? 0);
-    const paid = Boolean(raw.paid);
-    await incrementBalance(String(raw.customer_id), type === "credit" ? (paid ? 0 : -amount) : amount);
-  }
+  if (customerId) await recomputeBalance(customerId);
+  refreshAll();
 }
 
 // ─── Cloud backups ─────────────────────────────────────────────
@@ -585,11 +670,22 @@ export async function restoreCloudBackup(backupId: string, userCode?: string) {
 }
 
 export async function recalculateCustomerBalances() {
+  // Atomic full recompute (see supabase/functions.sql).
+  const { error } = await supabase.rpc("recompute_all_balances");
+  if (!error) {
+    refreshAll();
+    return;
+  }
+  if (!isMissingFunction(error)) throw error;
+
+  // Fallback: recompute each customer client-side using the SAME formula as
+  // the app (unpaid credits − unmatched payments). The old code subtracted
+  // every payment, which double-counted auto-applied payments.
   const { data: customers, error: cErr } = await supabase.from("customers").select("id");
   if (cErr) throw cErr;
   const { data: transactions, error: tErr } = await supabase
     .from("transactions")
-    .select("customer_id, type, amount, paid");
+    .select("customer_id, type, amount, paid, applied_to_credit_ids");
   if (tErr) throw tErr;
 
   const balances = new Map<string, number>();
@@ -600,14 +696,19 @@ export async function recalculateCustomerBalances() {
     if (!customerId) return;
     const type = normalizeType(t.type);
     const amount = Number(t.amount ?? 0);
-    const paid = Boolean(t.paid);
     const current = balances.get(customerId) || 0;
-    if (type === "credit") balances.set(customerId, current + (paid ? 0 : amount));
-    else balances.set(customerId, current - amount);
+    if (type === "credit") {
+      balances.set(customerId, current + (t.paid ? 0 : amount));
+    } else {
+      const applied =
+        Array.isArray(t.applied_to_credit_ids) && (t.applied_to_credit_ids as unknown[]).length > 0;
+      balances.set(customerId, current - (applied ? 0 : amount));
+    }
   });
 
   for (const [customerId, balance] of balances) {
-    const { error } = await supabase.from("customers").update({ balance }).eq("id", customerId);
-    if (error) throw error;
+    const { error: wErr } = await supabase.from("customers").update({ balance }).eq("id", customerId);
+    if (wErr) throw wErr;
   }
+  refreshAll();
 }

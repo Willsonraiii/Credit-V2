@@ -13,7 +13,7 @@ function Avatar({ name }: { name: string }) {
   ];
   const idx = Math.abs([...name].reduce((a, c) => a + c.charCodeAt(0), 0)) % hues.length;
   return (
-    <div className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${hues[idx]} text-white text-xl font-bold shadow-lg`}>
+    <div className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${hues[idx]} text-white text-xl font-bold shadow-lg ring-2 ring-white/15 shadow-black/40`}>
       {initials}
     </div>
   );
@@ -63,8 +63,11 @@ export default function Login({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6">
       <div className="flex flex-col items-center mb-8">
-        <img src={LOGO_SRC} alt="Yalambar Store" className="h-20 w-20 rounded-2xl object-contain bg-black/40 ring-1 ring-white/10 shadow-lg shadow-blue-700/20" />
-        <h1 className="mt-3 text-xl font-bold text-white">Yalambar Store</h1>
+        <div className="relative">
+          <div className="absolute -inset-3 rounded-[2rem] bg-[#1155ff]/20 blur-2xl animate-pulse-glow" />
+          <img src={LOGO_SRC} alt="Yalambar Store" className="relative h-20 w-20 rounded-2xl object-contain bg-black/40 ring-1 ring-white/10 shadow-lg shadow-blue-700/30" />
+        </div>
+        <h1 className="mt-4 text-xl font-bold text-white">Yalambar Store</h1>
         <p className="text-xs text-white/40 uppercase tracking-[0.2em]">POS · {t.title}</p>
       </div>
 
@@ -122,26 +125,26 @@ export default function Login({
               <button
                 key={d}
                 onClick={() => press(d)}
-                className="h-16 rounded-2xl bg-white/5 border border-white/10 text-2xl font-semibold text-white active:scale-95 active:bg-[#1155ff]/20 transition-all"
+                className="h-16 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm text-2xl font-semibold text-white hover:border-[#1155ff]/40 hover:bg-[#1155ff]/10 active:scale-95 active:bg-[#1155ff]/20 transition-all"
               >
                 {d}
               </button>
             ))}
             <button
               onClick={() => { setSelected(null); setPin(""); setError(false); }}
-              className="h-16 rounded-2xl bg-white/5 border border-white/10 text-xs font-medium text-white/60 active:scale-95 transition-all"
+              className="h-16 rounded-2xl bg-white/[0.04] border border-white/10 text-xs font-medium text-white/60 hover:bg-white/10 active:scale-95 transition-all"
             >
               {t.back}
             </button>
             <button
               onClick={() => press("0")}
-              className="h-16 rounded-2xl bg-white/5 border border-white/10 text-2xl font-semibold text-white active:scale-95 active:bg-[#1155ff]/20 transition-all"
+              className="h-16 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm text-2xl font-semibold text-white hover:border-[#1155ff]/40 hover:bg-[#1155ff]/10 active:scale-95 active:bg-[#1155ff]/20 transition-all"
             >
               0
             </button>
             <button
               onClick={backspace}
-              className="h-16 rounded-2xl bg-white/5 border border-white/10 text-white/60 flex items-center justify-center active:scale-95 transition-all"
+              className="h-16 rounded-2xl bg-white/[0.04] border border-white/10 text-white/60 hover:bg-white/10 flex items-center justify-center active:scale-95 transition-all"
             >
               <Delete className="h-6 w-6" />
             </button>

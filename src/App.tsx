@@ -18,10 +18,8 @@ import {
   createCloudBackup, listCloudBackups, restoreCloudBackup,
   recalculateCustomerBalances,
   listenPosUsers, savePosUsers,
-  setBackend, effectiveBackend, isSupabaseConfigured,
   type CloudBackup,
 } from "./db";
-import { migrateFirestoreToSupabase } from "./migrate";
 import Login from "./Login";
 import {
   loadUsers, saveUsers, makeUserId,
@@ -243,10 +241,10 @@ const inputClass =
   "w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all text-sm";
 
 const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#1155ff] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 hover:shadow-blue-600/45 transition-all hover:scale-[1.02] active:scale-[0.98]";
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1155ff] via-[#2f6bff] to-[#0ea5e9] animated-gradient bg-[length:200%_auto] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-700/40 ring-1 ring-white/15 hover:shadow-blue-500/50 hover:brightness-110 transition-all hover:scale-[1.02] active:scale-[0.97]";
 
 const btnGhost =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-all";
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.04] border border-white/10 px-4 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm hover:bg-white/10 hover:text-white hover:border-white/20 transition-all active:scale-[0.98]";
 
 // ─── Modal ─────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, icon }: {
@@ -316,8 +314,6 @@ export default function App() {
   const [showRestoreBackup, setShowRestoreBackup] = useState(false);
   const [cloudBackups, setCloudBackups] = useState<CloudBackup[]>([]);
   const [backupBusy, setBackupBusy] = useState(false);
-  const [migrating, setMigrating] = useState(false);
-  const [migrationLog, setMigrationLog] = useState<string[]>([]);
   const [paidBusyIds, setPaidBusyIds] = useState<Set<string>>(() => new Set());
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
@@ -801,46 +797,6 @@ export default function App() {
     }
   };
 
-  const handleMigrateToSupabase = async () => {
-    if (!isSupabaseConfigured()) {
-      notify(
-        language === "ne"
-          ? "Supabase सेट छैन। VITE_SUPABASE_URL र VITE_SUPABASE_ANON_KEY राख्नुहोस्।"
-          : "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then rebuild.",
-      );
-      return;
-    }
-    const ok = confirm(
-      language === "ne"
-        ? "Firebase बाट Supabase मा सबै डाटा सार्ने? तपाईंको Firebase डाटा परिवर्तन हुँदैन। जारी राख्ने?"
-        : "Copy all data from Firebase to Supabase? Your existing Firebase data is not changed. Continue?",
-    );
-    if (!ok) return;
-    setMigrating(true);
-    setMigrationLog([]);
-    try {
-      const result = await migrateFirestoreToSupabase((msg) =>
-        setMigrationLog((current) => [...current, msg]),
-      );
-      setBackend("supabase");
-      notify(
-        language === "ne"
-          ? `सफल भयो ✓ (${result.customers} ग्राहक, ${result.transactions} कारोबार)। रिलोड हुँदैछ…`
-          : `Migrated ✓ (${result.customers} customers, ${result.transactions} transactions). Reloading…`,
-      );
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (e) {
-      console.error(e);
-      notify(language === "ne" ? "Migration असफल भयो" : "Migration failed");
-      setMigrationLog((current) => [
-        ...current,
-        e instanceof Error ? e.message : String(e),
-      ]);
-    } finally {
-      setMigrating(false);
-    }
-  };
-
   // ─── Render ──────────────────────────────────────────────────
   // POS login gate — must pick a user + enter PIN before using the app
   if (!activeUser) {
@@ -866,7 +822,7 @@ export default function App() {
           <p className="text-white text-lg font-semibold">Connection Error</p>
           <p className="text-white/60 text-sm">{error}</p>
           <p className="text-white/40 text-xs mt-2">
-            Check your Supabase/Firebase configuration (<code className="bg-white/10 px-1.5 py-0.5 rounded">.env</code>)
+            Check your Supabase configuration (<code className="bg-white/10 px-1.5 py-0.5 rounded">.env</code>)
           </p>
           <button onClick={() => window.location.reload()} className={btnPrimary}>Retry</button>
         </div>
@@ -887,7 +843,7 @@ export default function App() {
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-black/80 border-b border-white/5">
         <div className="mx-auto max-w-6xl px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/10" />
+            <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/15 shadow-lg shadow-blue-900/30" />
             <div className="leading-tight">
               <p className="text-sm font-semibold text-white">Yalambar Store</p>
               <p className="hidden sm:block text-[10px] text-white/40 uppercase tracking-wider">{copy.subtitle}</p>
@@ -936,7 +892,7 @@ export default function App() {
 
         {/* Tab bar */}
         <div className="mx-auto max-w-6xl px-1 sm:px-6">
-          <nav className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+          <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar px-1 pb-1.5">
             {([
               ["dashboard", LayoutDashboard, copy.dashboard],
               ["customers", Users, copy.customers],
@@ -947,14 +903,16 @@ export default function App() {
                 <button
                   key={id}
                   onClick={() => navGo(id)}
-                  className={`relative inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    active ? "text-white" : "text-white/50 hover:text-white/80"
+                  className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                    active
+                      ? "text-white bg-gradient-to-r from-[#1155ff]/25 via-[#2f6bff]/15 to-transparent ring-1 ring-[#1155ff]/40 shadow-lg shadow-blue-900/30"
+                      : "text-white/50 hover:text-white/85 hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className={`h-4 w-4 transition-colors ${active ? "text-blue-300" : ""}`} />
                   {label}
                   {active && (
-                    <span className="absolute left-2 sm:left-3 right-2 sm:right-3 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-[#1155ff] via-blue-400 to-white/70 animated-gradient" />
+                    <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-[#1155ff] via-blue-400 to-white/70 animated-gradient" />
                   )}
                 </button>
               );
@@ -1245,7 +1203,7 @@ export default function App() {
                 };
                 const toneStr: string = tone;
                 return (
-                  <div key={i} className="glass rounded-2xl p-4 relative overflow-hidden">
+                  <div key={i} className="glass rounded-2xl p-4 relative overflow-hidden transition-all hover:-translate-y-0.5 hover:bg-white/[0.07]">
                     <div className={`absolute inset-x-0 -top-20 h-32 bg-gradient-to-b blur-2xl opacity-60 ${tones[toneStr]}`} />
                     <div className="relative">
                       <p className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/50">{label}</p>
@@ -1680,70 +1638,22 @@ export default function App() {
           </div>
         </div>
 
-        {/* Data backend + one-time migration */}
+        {/* Data backend */}
         <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
           <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
             {language === "ne" ? "डाटा ब्याकइन्ड" : "Data Backend"}
           </p>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-white/80">
-              {effectiveBackend() === "supabase" ? "Supabase" : "Firebase"}
-            </span>
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-                effectiveBackend() === "supabase"
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-400/30"
-                  : "bg-amber-500/15 text-amber-300 border-amber-400/30",
-              )}
-            >
-              {effectiveBackend() === "supabase"
-                ? language === "ne" ? "सक्रिय" : "ACTIVE"
-                : language === "ne" ? "हालको" : "CURRENT"}
+            <span className="text-sm text-white/80">Supabase</span>
+            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold border bg-emerald-500/15 text-emerald-300 border-emerald-400/30">
+              {language === "ne" ? "सक्रिय" : "ACTIVE"}
             </span>
           </div>
-
-          {effectiveBackend() === "firebase" && (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs text-white/50">
-                {language === "ne"
-                  ? "Firebase बाट Supabase मा एक क्लिकमा सार्नुहोस्। तपाईंको हालको डाटा जस्ताको तस्तै कपी हुन्छ।"
-                  : "One-click switch from Firebase to Supabase. Your current data is copied over unchanged."}
-              </p>
-              <button
-                onClick={handleMigrateToSupabase}
-                disabled={migrating || backupBusy || !isAdmin}
-                className={cn(btnPrimary, "w-full disabled:opacity-40 disabled:cursor-not-allowed")}
-              >
-                {migrating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowLeft className="h-4 w-4" />
-                )}
-                {migrating
-                  ? language === "ne" ? "सार्दैछ…" : "Migrating…"
-                  : language === "ne" ? "Supabase मा सार्नुहोस्" : "Migrate to Supabase"}
-              </button>
-              {!isAdmin && (
-                <p className="text-[11px] text-white/35 text-center">
-                  {language === "ne" ? "Migration एडमिनको लागि मात्र।" : "Migration is admin-only."}
-                </p>
-              )}
-              {migrationLog.length > 0 && (
-                <pre className="max-h-40 overflow-y-auto rounded-xl bg-black/30 border border-white/10 p-3 text-[11px] leading-relaxed text-white/60 whitespace-pre-wrap">
-                  {migrationLog.join("\n")}
-                </pre>
-              )}
-            </div>
-          )}
-
-          {effectiveBackend() === "supabase" && (
-            <p className="mt-2 text-xs text-white/50">
-              {language === "ne"
-                ? "यो एप अब Supabase मा चलिरहेको छ।"
-                : "This app is now running on Supabase."}
-            </p>
-          )}
+          <p className="mt-2 text-xs text-white/50">
+            {language === "ne"
+              ? "यो एप Supabase मा चलिरहेको छ।"
+              : "This app runs on Supabase."}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">

@@ -5,67 +5,47 @@ balances, built with React + Vite + Tailwind. Data storage has been migrated
 from **Firebase Firestore** to **Supabase (Postgres)** — the app keeps the same
 data, features and offline behavior.
 
+The app now runs **entirely on Supabase**. The Firebase SDK, the legacy
+`firebase.ts` layer and the one-time migration code have been removed.
+
 ---
 
-## Switching from Firebase to Supabase (without losing data)
+## History: how the Firebase → Supabase switch happened (no data lost)
 
-The app ships with **both** backends wired up:
+The migration was done in three steps, then Firebase was removed from the app:
 
-- `src/firebase.ts` — the original Firestore layer (kept as the read source for
-  the one-time migration and as an automatic fallback).
-- `src/supabase.ts` — the new Supabase layer.
-- `src/db.ts` — a dispatcher that routes every call to the active backend.
+1. `supabase/schema.sql` created the `customers`, `transactions`,
+   `cloud_backups`, `cloud_backup_items` and `pos_users` tables.
+2. A one-time in-app migration copied every Firestore document (including cloud
+   backup subcollections) into Supabase — 16 customers, 55 transactions,
+   4 POS users and 2 cloud backups, all verified field-by-field.
+3. `src/db.ts` was flipped so **Supabase is the default for every device**, and
+   the Firebase SDK + migration code were deleted.
 
-Out of the box the app still runs on Firebase exactly as before. You switch to
-Supabase in three steps:
+Your Firebase project was left untouched and can be kept as a read-only backup.
 
-### Step 1 — Create a Supabase project and tables
+### Project setup (already completed)
 
-1. Go to <https://supabase.com> → **New project** (free tier is fine).
-2. Pick a name, set a strong database password, choose a region close to you
-   (e.g. Singapore / Mumbai) and click **Create project**.
-3. Open **SQL Editor** → **New query**, paste the entire contents of
-   [`supabase/schema.sql`](supabase/schema.sql), and click **Run**.
+- **Tables:** run [`supabase/schema.sql`](supabase/schema.sql) once in the
+  Supabase SQL Editor — already done for project `zpeihhsewpamzxuivawa`.
+- **Balance/transaction fix functions:** run [`supabase/functions.sql`](supabase/functions.sql)
+  once too. It makes every balance change atomic (fixes the "PAID/UNPAID keeps
+  adding" drift and the delete-payment cleanup). The app falls back to a
+  client-side recompute until you run it, but running it is recommended.
+- **Keys:** the Project URL + anon/public key are set in `src/supabase.ts`
+  (with `.env` as an override). The anon key is public by design; security
+  comes from Row Level Security in `schema.sql`, not from hiding the key.
 
-   This creates the `customers`, `transactions`, `cloud_backups`,
-   `cloud_backup_items` and `pos_users` tables, an atomic balance function,
-   row-level security policies and the realtime publication.
+### Balance rules (how totals are calculated)
 
-### Step 2 — Add your project keys to the app
-
-1. In Supabase Dashboard → **Project Settings → API**, copy the **Project URL**
-   and the **anon (public) key**.
-2. Create a `.env` file in the repo root (copy `.env.example`):
-
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Fill in the two values, then build/deploy the app as usual:
-
-   ```bash
-   npm install
-   npm run build
-   ```
-
-   The `anon` key is meant to be public — security comes from the Row Level
-   Security policies in `schema.sql`, not from hiding the key.
-
-### Step 3 — Run the one-time migration (inside the app)
-
-1. Open the app and sign in as an **admin**.
-2. Go to **Settings → Data Backend**.
-3. Click **Migrate to Supabase**.
-
-The app reads every customer, transaction, POS user and cloud backup (including
-backup subcollections) from Firebase and copies them into Supabase, then
-reloads itself running on Supabase. Your Firebase data is **not modified**, so
-you can re-run the migration or roll back any time.
-
-> Safety tip: keep the Firebase project until you've confirmed everything looks
-> right on Supabase. If you ever want to switch back, clear the
-> `yalambar_backend_v1` key in the browser's localStorage (or run this in the
-> console: `localStorage.removeItem("yalambar_backend_v1")`).
+- A **credit** adds to the customer's balance until it is marked PAID.
+- Marking a credit **PAID** removes it from the balance; UNPAID adds it back.
+- A **payment** reduces the balance. If the payment exactly covers some
+  unpaid credits, those credits are marked PAID and the payment isn't counted
+  twice.
+- The balance is always **recomputed from the transactions**, so it can't
+  drift — the `customers.balance` column is a derived cache, and the "Repair"
+  button re-derives it for every customer.
 
 ---
 
@@ -102,12 +82,11 @@ users and enable Supabase Auth), and disable the open policies.
 src/
   App.tsx        main UI (dashboard, customers, transactions, settings, admin)
   Login.tsx      PIN login screen
-  db.ts          backend dispatcher (firebase ↔ supabase)
-  firebase.ts    legacy Firestore data layer (kept for migration/fallback)
-  supabase.ts    Supabase data layer
-  migrate.ts     one-time Firestore → Supabase migration
+  db.ts          data-layer re-export (Supabase)
+  supabase.ts    Supabase data layer (listeners, writes, backups, balances)
   types.ts       shared types (Timestamp, Customer, Transaction, CloudBackup)
   users.ts       local POS users/PINs
 supabase/
   schema.sql     tables, RLS, realtime, balance RPC
+  functions.sql  atomic balance/toggle/delete fixes (run once after schema.sql)
 ```
