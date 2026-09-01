@@ -1,4 +1,4 @@
-const CACHE_NAME = "yalambar-v5-offline-firestore";
+const CACHE_NAME = "yalambar-v6-supabase";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -28,12 +28,11 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Never cache Firebase/Google API calls. This prevents deleted or edited
-  // Firestore records from reappearing because of stale service-worker cache.
+  // Never cache backend API calls (Supabase). This prevents deleted or edited
+  // records from reappearing because of stale cache.
   if (
-    url.hostname.includes("firebase") ||
-    url.hostname.includes("firestore.googleapis.com") ||
-    url.hostname.includes("googleapis.com")
+    url.hostname.includes("supabase.co") ||
+    url.hostname.includes("supabase.com")
   ) {
     event.respondWith(fetch(request));
     return;

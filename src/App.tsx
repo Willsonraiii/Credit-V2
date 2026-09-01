@@ -11,15 +11,15 @@ import NepaliDate from "nepali-date-converter";
 import type { Customer, Transaction } from "./types";
 import {
   listenCustomers, listenTransactions,
-  addCustomerFire, addTransactionFire,
-  deleteCustomerFire, deleteTransactionFire,
-  updateCustomerFire, updateTransactionFire,
-  setCreditPaidFire, setCreditSecuredFire,
-  createCloudBackupFire, listCloudBackupsFire, restoreCloudBackupFire,
-  recalculateCustomerBalancesFire,
-  listenPosUsers, savePosUsersFire,
+  addCustomer, addTransaction,
+  deleteCustomer, deleteTransaction,
+  updateCustomer, updateTransaction,
+  setCreditPaid, setCreditSecured,
+  createCloudBackup, listCloudBackups, restoreCloudBackup,
+  recalculateCustomerBalances,
+  listenPosUsers, savePosUsers,
   type CloudBackup,
-} from "./firebase";
+} from "./db";
 import Login from "./Login";
 import {
   loadUsers, saveUsers, makeUserId,
@@ -83,7 +83,7 @@ const text = {
     amount: "Amount (NPR)",
     note: "Note (optional)",
     saveCredit: "Save Credit",
-    stored: "Data stored securely in Firestore",
+    stored: "Data stored securely in the cloud",
     recentlyCleared: "Cleared This Week",
     reviewWeek: "Available for 1 week review",
     calculation: "Calculation",
@@ -158,7 +158,7 @@ const text = {
     amount: "रकम (NPR)",
     note: "नोट (वैकल्पिक)",
     saveCredit: "उधारो सेभ",
-    stored: "डाटा फायरस्टोरमा सुरक्षित छ",
+    stored: "डाटा क्लाउडमा सुरक्षित छ",
     recentlyCleared: "यो हप्ता सफा भएका",
     reviewWeek: "१ हप्ता समीक्षा गर्न उपलब्ध",
     calculation: "हिसाब",
@@ -241,10 +241,10 @@ const inputClass =
   "w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all text-sm";
 
 const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#1155ff] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 hover:shadow-blue-600/45 transition-all hover:scale-[1.02] active:scale-[0.98]";
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1155ff] via-[#2f6bff] to-[#0ea5e9] animated-gradient bg-[length:200%_auto] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-700/40 ring-1 ring-white/15 hover:shadow-blue-500/50 hover:brightness-110 transition-all hover:scale-[1.02] active:scale-[0.97]";
 
 const btnGhost =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-all";
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.04] border border-white/10 px-4 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm hover:bg-white/10 hover:text-white hover:border-white/20 transition-all active:scale-[0.98]";
 
 // ─── Modal ─────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, icon }: {
@@ -254,8 +254,8 @@ function Modal({ open, onClose, title, children, icon }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-[#0f172a] border border-white/10 p-5 sm:p-6 animate-slide-up sm:animate-scale-in">
-        <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="relative z-10 w-full max-w-lg max-h-[92vh] rounded-t-3xl sm:rounded-2xl bg-[#0f172a] border border-white/10 p-5 sm:p-6 animate-slide-up sm:animate-scale-in flex flex-col">
+        <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
           <div className="flex items-center gap-3">
             {icon && (
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#1155ff]/25 to-blue-400/10 ring-1 ring-white/10 text-blue-200">
@@ -268,7 +268,7 @@ function Modal({ open, onClose, title, children, icon }: {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="space-y-4">{children}</div>
+        <div className="space-y-4 overflow-y-auto pr-1">{children}</div>
       </div>
     </div>
   );
@@ -403,12 +403,12 @@ export default function App() {
     };
   }, [activeUser]);
 
-  // Firestore listeners
+  // Data listeners
   useEffect(() => {
     setLoading(true);
     const unsubC = listenCustomers(
       (data) => { setCustomers(data); setLoading(false); setError(null); },
-      (err) => { console.error(err); setError("Failed to load customers. Check your Firebase config."); setLoading(false); },
+      (err) => { console.error(err); setError("Failed to load customers. Check your data connection."); setLoading(false); },
     );
     const unsubT = listenTransactions(
       (data) => { setTransactions(data); },
@@ -605,21 +605,21 @@ export default function App() {
   // ─── Actions ─────────────────────────────────────────────────
   const handleAddCustomer = async (data: { name: string; phone?: string; address?: string }) => {
     try {
-      await addCustomerFire({ ...data, userCode: staffCode });
+      await addCustomer({ ...data, userCode: staffCode });
       notify("Customer added ✓");
     } catch (e) { console.error(e); notify("Failed to add customer"); }
   };
 
   const handleEditCustomer = async (id: string, data: { name: string; phone?: string; address?: string }) => {
     try {
-      await updateCustomerFire(id, data);
+      await updateCustomer(id, data);
       notify("Customer updated ✓");
     } catch (e) { console.error(e); notify("Failed to update"); }
   };
 
   const handleEditTx = async (id: string, data: { amount: number; note?: string }) => {
     try {
-      await updateTransactionFire(id, data);
+      await updateTransaction(id, data);
       notify("Transaction updated ✓");
     } catch (e) { console.error(e); notify("Failed to update"); }
   };
@@ -636,7 +636,7 @@ export default function App() {
     if (paidBusyIds.has(tx.id)) return;
     setPaidBusyIds((current) => new Set(current).add(tx.id));
     try {
-      await setCreditPaidFire(tx.id, !tx.paid, staffCode);
+      await setCreditPaid(tx.id, !tx.paid, staffCode);
       notify(!tx.paid ? "Credit item marked PAID ✓" : "Credit item kept as credit ✓");
     } catch (e) { console.error(e); notify("Failed to update paid status"); }
     finally {
@@ -653,7 +653,7 @@ export default function App() {
     if (paidBusyIds.has(tx.id)) return;
     setPaidBusyIds((current) => new Set(current).add(tx.id));
     try {
-      await setCreditSecuredFire(tx.id, !tx.secured, staffCode);
+      await setCreditSecured(tx.id, !tx.secured, staffCode);
       notify(!tx.secured ? "Credit item secured ✓" : "Credit item unsecured ✓");
     } catch (e) { console.error(e); notify("Failed to update secure status"); }
     finally {
@@ -670,8 +670,8 @@ export default function App() {
     try {
       // Delete all transactions for this customer
       const txs = transactions.filter((t) => t.customerId === c.id);
-      await Promise.all(txs.map((t) => deleteTransactionFire(t.id)));
-      await deleteCustomerFire(c.id);
+      await Promise.all(txs.map((t) => deleteTransaction(t.id)));
+      await deleteCustomer(c.id);
       if (view.customerId === c.id) setView({ tab: "dashboard", customerId: null });
       notify("Customer deleted ✓");
     } catch (e) { console.error(e); notify("Failed to delete"); }
@@ -679,7 +679,7 @@ export default function App() {
 
   const handleDeleteTx = async (tx: Transaction) => {
     if (!confirm("Delete this transaction?")) return;
-    try { await deleteTransactionFire(tx.id); notify("Transaction deleted ✓"); }
+    try { await deleteTransaction(tx.id); notify("Transaction deleted ✓"); }
     catch (e) { console.error(e); notify("Failed to delete"); }
   };
 
@@ -697,7 +697,7 @@ export default function App() {
     );
     if (!ok) return;
     try {
-      await deleteTransactionFire(latest.id);
+      await deleteTransaction(latest.id);
       notify(language === "ne" ? "Undo भयो ✓" : "Undo complete ✓");
     } catch (e) {
       console.error(e);
@@ -708,7 +708,7 @@ export default function App() {
   const handleAddTx = async (type: "credit" | "payment", amount: number, note?: string) => {
     if (!selectedCustomer) return;
     try {
-      await addTransactionFire({ customerId: selectedCustomer.id, type, amount, note, userCode: staffCode });
+      await addTransaction({ customerId: selectedCustomer.id, type, amount, note, userCode: staffCode });
       notify(type === "credit" ? "Credit recorded ✓" : "Payment recorded ✓");
     } catch (e) { console.error(e); notify("Failed to record"); }
   };
@@ -734,7 +734,7 @@ export default function App() {
   const handleCreateCloudBackup = async () => {
     setBackupBusy(true);
     try {
-      await createCloudBackupFire(staffCode, "Manual backup");
+      await createCloudBackup(staffCode, "Manual backup");
       notify(language === "ne" ? "क्लाउड ब्याकअप भयो ✓" : "Cloud backup created ✓");
     } catch (e) {
       console.error(e);
@@ -747,7 +747,7 @@ export default function App() {
   const openRestoreBackups = async () => {
     setBackupBusy(true);
     try {
-      const backups = await listCloudBackupsFire();
+      const backups = await listCloudBackups();
       setCloudBackups(backups);
       setShowRestoreBackup(true);
     } catch (e) {
@@ -767,7 +767,7 @@ export default function App() {
     if (!ok) return;
     setBackupBusy(true);
     try {
-      await restoreCloudBackupFire(backupId, staffCode);
+      await restoreCloudBackup(backupId, staffCode);
       notify(language === "ne" ? "Restore भयो ✓" : "Backup restored ✓");
       setShowRestoreBackup(false);
     } catch (e) {
@@ -787,7 +787,7 @@ export default function App() {
     if (!ok) return;
     setBackupBusy(true);
     try {
-      await recalculateCustomerBalancesFire();
+      await recalculateCustomerBalances();
       notify(language === "ne" ? "Balance मिल्यो ✓" : "Balances repaired ✓");
     } catch (e) {
       console.error(e);
@@ -808,7 +808,7 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center bg-[#020617]">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 text-[#1155ff] animate-spin mx-auto" />
-          <p className="text-white/60 text-sm">Loading from Firebase...</p>
+          <p className="text-white/60 text-sm">Loading data…</p>
         </div>
       </div>
     );
@@ -822,7 +822,7 @@ export default function App() {
           <p className="text-white text-lg font-semibold">Connection Error</p>
           <p className="text-white/60 text-sm">{error}</p>
           <p className="text-white/40 text-xs mt-2">
-            Edit <code className="bg-white/10 px-1.5 py-0.5 rounded">src/firebase.ts</code> with your Firebase config
+            Check your Supabase configuration (<code className="bg-white/10 px-1.5 py-0.5 rounded">.env</code>)
           </p>
           <button onClick={() => window.location.reload()} className={btnPrimary}>Retry</button>
         </div>
@@ -843,7 +843,7 @@ export default function App() {
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-black/80 border-b border-white/5">
         <div className="mx-auto max-w-6xl px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/10" />
+            <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/15 shadow-lg shadow-blue-900/30" />
             <div className="leading-tight">
               <p className="text-sm font-semibold text-white">Yalambar Store</p>
               <p className="hidden sm:block text-[10px] text-white/40 uppercase tracking-wider">{copy.subtitle}</p>
@@ -892,7 +892,7 @@ export default function App() {
 
         {/* Tab bar */}
         <div className="mx-auto max-w-6xl px-1 sm:px-6">
-          <nav className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+          <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar px-1 pb-1.5">
             {([
               ["dashboard", LayoutDashboard, copy.dashboard],
               ["customers", Users, copy.customers],
@@ -903,14 +903,16 @@ export default function App() {
                 <button
                   key={id}
                   onClick={() => navGo(id)}
-                  className={`relative inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    active ? "text-white" : "text-white/50 hover:text-white/80"
+                  className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                    active
+                      ? "text-white bg-gradient-to-r from-[#1155ff]/25 via-[#2f6bff]/15 to-transparent ring-1 ring-[#1155ff]/40 shadow-lg shadow-blue-900/30"
+                      : "text-white/50 hover:text-white/85 hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className={`h-4 w-4 transition-colors ${active ? "text-blue-300" : ""}`} />
                   {label}
                   {active && (
-                    <span className="absolute left-2 sm:left-3 right-2 sm:right-3 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-[#1155ff] via-blue-400 to-white/70 animated-gradient" />
+                    <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-[#1155ff] via-blue-400 to-white/70 animated-gradient" />
                   )}
                 </button>
               );
@@ -1201,7 +1203,7 @@ export default function App() {
                 };
                 const toneStr: string = tone;
                 return (
-                  <div key={i} className="glass rounded-2xl p-4 relative overflow-hidden">
+                  <div key={i} className="glass rounded-2xl p-4 relative overflow-hidden transition-all hover:-translate-y-0.5 hover:bg-white/[0.07]">
                     <div className={`absolute inset-x-0 -top-20 h-32 bg-gradient-to-b blur-2xl opacity-60 ${tones[toneStr]}`} />
                     <div className="relative">
                       <p className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/50">{label}</p>
@@ -1636,6 +1638,24 @@ export default function App() {
           </div>
         </div>
 
+        {/* Data backend */}
+        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+          <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
+            {language === "ne" ? "डाटा ब्याकइन्ड" : "Data Backend"}
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-white/80">Supabase</span>
+            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold border bg-emerald-500/15 text-emerald-300 border-emerald-400/30">
+              {language === "ne" ? "सक्रिय" : "ACTIVE"}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-white/50">
+            {language === "ne"
+              ? "यो एप Supabase मा चलिरहेको छ।"
+              : "This app runs on Supabase."}
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
           <button
             onClick={() => setLanguage(language === "en" ? "ne" : "en")}
@@ -1650,12 +1670,12 @@ export default function App() {
 
         <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
           <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
-            {language === "ne" ? "क्लाउड ब्याकअप (फायरबेस)" : "Cloud Backup (Firebase)"}
+            {language === "ne" ? "क्लाउड ब्याकअप" : "Cloud Backup"}
           </p>
           <p className="text-xs text-white/50">
             {language === "ne"
-              ? "तपाईंले सेट गरेको फायरबेस प्रोजेक्टमा सबै ग्राहक र कारोबार स्वचालित रूपमा बचत गरिन्छ।"
-              : "All customers and transactions are saved automatically to your configured Firebase project."}
+              ? "सबै ग्राहक र कारोबार तपाईंको डाटा ब्याकइन्डमा स्वचालित रूपमा बचत गरिन्छ।"
+              : "All customers and transactions are saved automatically to your data backend."}
           </p>
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button onClick={handleCreateCloudBackup} disabled={backupBusy} className={cn(btnGhost, "disabled:opacity-40 disabled:cursor-not-allowed")}>
@@ -1671,7 +1691,7 @@ export default function App() {
             </p>
           )}
           <p className="text-[11px] text-white/40 mt-2 text-center">
-            <code className="bg-white/10 px-1.5 py-0.5 rounded">src/firebase.ts</code>
+            <code className="bg-white/10 px-1.5 py-0.5 rounded">src/db.ts</code>
           </p>
         </div>
 
@@ -1720,7 +1740,7 @@ export default function App() {
           setUsers(next);
           saveUsers(next);
           try {
-            await savePosUsersFire(next);
+            await savePosUsers(next);
             notify(language === "ne" ? "सुरक्षित ✓" : "Saved ✓");
           } catch (e) {
             console.error(e);
