@@ -275,21 +275,35 @@ button:focus-visible, a:focus-visible {
   border-radius: 12px;
 }
 
-/* ── Safe area helpers (notched devices / PWA) ────────────── */
-/*
- * The app runs edge-to-edge (viewport-fit=cover + standalone PWA), so the
- * notch / status bar overlaps the very top of the screen. Keep fixed and
- * sticky UI clear of it. env() resolves to 0 on desktops and on phones
- * without a cutout, so these helpers are no-ops there.
- */
+/* ── Safe area helpers (notches / punch-holes / home indicators) ──
+   Browsers report the device's cutouts automatically through
+   env(safe-area-inset-*) — they are 0 on desktops and on phones without
+   a cutout, so these helpers adapt on every phone with no detection code.
+   Each rule is written twice: browsers that don't support env()/max()
+   ignore the second line and keep the first (fallback) value. */
 .pt-safe {
-  /* base 0.75rem matches the header's py-3 spacing on normal screens */
-  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+  padding-top: 0.75rem; /* fallback = previous header spacing */
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
-.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
-.mb-safe { margin-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)); }
-/* Top-fixed overlays (toast etc.): drop below the status bar / notch */
-.top-safe-overlay { top: calc(env(safe-area-inset-top, 0px) + 1rem); }
+.pb-safe {
+  padding-bottom: 0; /* fallback */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* Top-fixed overlays (toast etc.): sit just below the status bar/notch */
+.top-safe-overlay {
+  top: 1rem; /* fallback */
+  top: max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem));
+}
+/* Bottom dock: one continuous frosted surface that reaches the physical
+   bottom edge (its inner .pb-safe clears the home indicator), so no raw
+   background seam shows around or underneath it. */
+.dock-bar {
+  background: linear-gradient(180deg, rgba(15, 20, 40, 0.85), rgba(6, 9, 20, 0.96));
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -10px 36px rgba(0, 0, 0, 0.45);
+}
 
 /* ── Numeric / scroll helpers ─────────────────────────────── */
 .tabular { font-variant-numeric: tabular-nums; }
