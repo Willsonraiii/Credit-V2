@@ -276,8 +276,20 @@ button:focus-visible, a:focus-visible {
 }
 
 /* ── Safe area helpers (notched devices / PWA) ────────────── */
+/*
+ * The app runs edge-to-edge (viewport-fit=cover + standalone PWA), so the
+ * notch / status bar overlaps the very top of the screen. Keep fixed and
+ * sticky UI clear of it. env() resolves to 0 on desktops and on phones
+ * without a cutout, so these helpers are no-ops there.
+ */
+.pt-safe {
+  /* base 0.75rem matches the header's py-3 spacing on normal screens */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+}
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .mb-safe { margin-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)); }
+/* Top-fixed overlays (toast etc.): drop below the status bar / notch */
+.top-safe-overlay { top: calc(env(safe-area-inset-top, 0px) + 1rem); }
 
 /* ── Numeric / scroll helpers ─────────────────────────────── */
 .tabular { font-variant-numeric: tabular-nums; }

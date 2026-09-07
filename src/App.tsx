@@ -869,14 +869,14 @@ export default function App() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 z-[200] mx-auto sm:mx-0 w-fit max-w-[92vw] sm:max-w-md animate-toast glass-premium rounded-2xl px-4 py-3 text-sm text-white font-medium shadow-2xl flex items-center gap-2.5">
+        <div className="fixed top-safe-overlay inset-x-4 sm:inset-x-auto sm:right-4 z-[200] mx-auto sm:mx-0 w-fit max-w-[92vw] sm:max-w-md animate-toast glass-premium rounded-2xl px-4 py-3 text-sm text-white font-medium shadow-2xl flex items-center gap-2.5">
           <span className="h-2 w-2 rounded-full bg-gradient-to-r from-[#1155ff] to-sky-400 animate-pulse shrink-0" />
           {toast}
         </div>
       )}
 
       {/* Top Bar */}
-      <header className="sticky top-0 z-40 backdrop-blur-2xl bg-black/70 border-b border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+      <header className="pt-safe sticky top-0 z-40 backdrop-blur-2xl bg-black/70 border-b border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
         <div className="mx-auto max-w-7xl px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/15 shadow-lg shadow-blue-900/30" />
