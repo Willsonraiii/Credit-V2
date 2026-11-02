@@ -1,4 +1,4 @@
-const CACHE_NAME = "yalambar-v7-supabase";
+const CACHE_NAME = "yalambar-v8-supabase";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
