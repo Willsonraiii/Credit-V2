@@ -6,7 +6,14 @@ import {
   Eye, Download, RotateCcw, WifiOff,
   Clock3, KeyRound, Languages, Settings,
   ShieldCheck, LogOut, Pencil, UserPlus,
+  Fingerprint, Calculator, ListPlus,
 } from "lucide-react";
+import {
+  isBiometricsSupported,
+  hasBiometricForUser,
+  registerBiometric,
+  removeBiometricForUser,
+} from "./lib/biometrics";
 import NepaliDate from "nepali-date-converter";
 import type { Customer, Transaction } from "./types";
 import {
@@ -345,6 +352,39 @@ export default function App() {
 
   // Toast helper
   const notify = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); }, []);
+
+  // Biometrics on this device
+  const [bioSupported, setBioSupported] = useState(false);
+  const [userBioActive, setUserBioActive] = useState(false);
+
+  useEffect(() => {
+    isBiometricsSupported().then(setBioSupported);
+  }, []);
+
+  useEffect(() => {
+    if (activeUser) {
+      setUserBioActive(hasBiometricForUser(activeUser.id));
+    } else {
+      setUserBioActive(false);
+    }
+  }, [activeUser, showSettings]);
+
+  const handleToggleBiometrics = async () => {
+    if (!activeUser) return;
+    if (userBioActive) {
+      removeBiometricForUser(activeUser.id);
+      setUserBioActive(false);
+      notify(language === "ne" ? "बायोमेट्रिक हटाइयो ✓" : "Biometrics removed ✓");
+    } else {
+      const ok = await registerBiometric(activeUser.id, activeUser.name);
+      if (ok) {
+        setUserBioActive(true);
+        notify(language === "ne" ? "बायोमेट्रिक सक्रिय गरियो ✓" : "Biometrics enabled ✓");
+      } else {
+        notify(language === "ne" ? "बायोमेट्रिक सेटअप रद्द भयो" : "Biometrics setup cancelled or failed");
+      }
+    }
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -865,6 +905,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative bg-transparent">
+      {/* iOS PWA status bar backdrop plate: eliminates white progressive blur over notch */}
+      <div className="status-bar-plate" aria-hidden="true" />
       <AuroraBackground />
 
       {/* Toast */}
@@ -876,7 +918,7 @@ export default function App() {
       )}
 
       {/* Top Bar */}
-      <header className="pt-safe sticky top-0 z-40 backdrop-blur-2xl bg-black/70 border-b border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+      <header className="pt-safe sticky top-0 z-40 bg-[#060914] border-b border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="mx-auto max-w-7xl px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <img src={LOGO_SRC} alt="Yalambar Store" className="h-10 w-10 rounded-xl object-contain bg-black/40 ring-1 ring-white/15 shadow-lg shadow-blue-900/30" />
@@ -954,7 +996,7 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-5">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 pb-36 md:pb-8 space-y-5">
         {/* Store header - always visible */}
         <div className="glass rounded-2xl p-4 sm:p-5 relative overflow-hidden animate-fade-up">
           <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-gradient-to-br from-[#1155ff]/25 to-blue-400/5 blur-2xl" />
@@ -1698,6 +1740,43 @@ export default function App() {
           </div>
         </div>
 
+        {/* Biometrics Device Security */}
+        {bioSupported && (
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-center text-blue-400 shrink-0">
+                  <Fingerprint className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {language === "ne" ? "बायोमेट्रिक लक (Face ID / Fingerprint)" : "Biometric Unlock (Face ID / Fingerprint)"}
+                  </p>
+                  <p className="text-xs text-white/50">
+                    {userBioActive
+                      ? (language === "ne" ? "यो डिभाइसमा सक्रिय छ ✓" : "Active on this device for your profile ✓")
+                      : (language === "ne" ? "PIN बिना छिटो खोल्न सेटअप गर्नुहोस्" : "Setup to unlock instantly without entering PIN")}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleBiometrics}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap",
+                  userBioActive
+                    ? "bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20"
+                    : "bg-blue-600 hover:bg-blue-500 text-white border-blue-400/30 shadow-md shadow-blue-900/30"
+                )}
+              >
+                {userBioActive
+                  ? (language === "ne" ? "हटाउनुहोस्" : "Disable")
+                  : (language === "ne" ? "सक्रिय गर्नुहोस्" : "Enable")}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Data backend */}
         <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
           <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
@@ -1873,7 +1952,13 @@ function AddCustomerModal({ open, onClose, onSubmit, copy }: {
   );
 }
 
-// ─── Transaction Modal ─────────────────────────────────────────
+// ─── Transaction Modal with Multi-Item Calculator ───────────────
+interface ItemRow {
+  id: string;
+  amount: string;
+  label: string;
+}
+
 function TxModal({ open, onClose, kind, onSubmit, copy }: {
   open: boolean;
   onClose: () => void;
@@ -1881,36 +1966,209 @@ function TxModal({ open, onClose, kind, onSubmit, copy }: {
   onSubmit: (amount: number, note?: string) => void;
   copy: CopyText;
 }) {
+  const isCredit = kind === "credit";
+  const [tab, setTab] = useState<"single" | "multi">("single");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const isCredit = kind === "credit";
+  const [items, setItems] = useState<ItemRow[]>([
+    { id: "1", amount: "", label: "" },
+    { id: "2", amount: "", label: "" },
+  ]);
+
+  useEffect(() => {
+    if (open) {
+      setTab("single");
+      setAmount("");
+      setNote("");
+      setItems([
+        { id: "1", amount: "", label: "" },
+        { id: "2", amount: "", label: "" },
+      ]);
+    }
+  }, [open]);
+
+  // Support inline math (e.g. typing "350+350+280")
+  const evaluateInputAmount = (val: string): number => {
+    if (!val) return 0;
+    try {
+      if (val.includes("+")) {
+        const parts = val.split("+").map((p) => Number(p.trim())).filter((n) => !isNaN(n));
+        return parts.reduce((a, b) => a + b, 0);
+      }
+      const n = Number(val);
+      return isNaN(n) ? 0 : n;
+    } catch {
+      return 0;
+    }
+  };
+
+  const multiTotal = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const singleEvaluated = evaluateInputAmount(amount);
+  const totalAmount = tab === "multi" ? multiTotal : singleEvaluated;
+
+  const addItem = () => {
+    setItems((prev) => [...prev, { id: Math.random().toString(36).slice(2, 7), amount: "", label: "" }]);
+  };
+
+  const removeItem = (id: string) => {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  };
+
+  const updateItem = (id: string, field: "amount" | "label", value: string) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
+  };
 
   const submit = () => {
-    const n = Math.round(Number(amount));
-    if (!n || n <= 0) return;
-    onSubmit(n, note.trim() || undefined);
-    setAmount(""); setNote("");
+    const finalAmount = Math.round(totalAmount);
+    if (!finalAmount || finalAmount <= 0) return;
+
+    let finalNote = note.trim();
+    if (tab === "multi") {
+      const validItems = items.filter((it) => Number(it.amount) > 0);
+      const breakdown = validItems
+        .map((it) => (it.label.trim() ? `${it.label.trim()} Rs.${it.amount}` : `Rs.${it.amount}`))
+        .join(" + ");
+      if (!finalNote) {
+        finalNote = breakdown;
+      } else if (validItems.length > 1) {
+        finalNote = `${finalNote} (${breakdown})`;
+      }
+    } else if (amount.includes("+")) {
+      if (!finalNote) finalNote = amount.trim();
+    }
+
+    onSubmit(finalAmount, finalNote || undefined);
+    onClose();
   };
 
   return (
     <Modal open={open} onClose={onClose} title={isCredit ? copy.addCredit : copy.recordPayment}
       icon={isCredit ? <TrendingUp className="h-5 w-5" /> : <HandCoins className="h-5 w-5" />}
     >
-      <Label text={copy.amount}>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">Rs.</span>
-          <input autoFocus type="number" inputMode="numeric" min={1} placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)}
-            className={inputClass + " pl-10"} />
+      {/* Mode switcher: Single Amount vs Multiple Items / Calculator */}
+      <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/5 border border-white/10 mb-4">
+        <button
+          type="button"
+          onClick={() => setTab("single")}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            tab === "single"
+              ? "bg-[#1155ff] text-white shadow-md shadow-blue-900/40"
+              : "text-white/60 hover:text-white"
+          }`}
+        >
+          {copy.amount}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("multi")}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            tab === "multi"
+              ? "bg-[#1155ff] text-white shadow-md shadow-blue-900/40"
+              : "text-white/60 hover:text-white"
+          }`}
+        >
+          <ListPlus className="h-3.5 w-3.5" />
+          <span>{isCredit ? "Multiple Items / Beers" : "Multiple Amounts"}</span>
+        </button>
+      </div>
+
+      {tab === "single" ? (
+        <Label text={copy.amount}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">Rs.</span>
+            <input
+              autoFocus
+              type="text"
+              placeholder="0 (or e.g. 350+350+280)"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className={inputClass + " pl-10"}
+            />
+          </div>
+          {amount.includes("+") && (
+            <p className="mt-1 text-xs text-sky-300 font-semibold tabular">
+              Total: Rs. {evaluateInputAmount(amount).toLocaleString()}
+            </p>
+          )}
+        </Label>
+      ) : (
+        <div className="space-y-2 mb-3">
+          <div className="flex items-center justify-between text-xs text-white/50">
+            <span>Item price list</span>
+            <span className="text-sky-300 font-bold tabular">Total: Rs. {multiTotal.toLocaleString()}</span>
+          </div>
+          <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar pr-0.5">
+            {items.map((it, idx) => (
+              <div key={it.id} className="flex items-center gap-2 animate-fade-in">
+                <span className="text-xs text-white/30 w-4 text-right tabular">{idx + 1}.</span>
+                <input
+                  type="text"
+                  placeholder={isCredit ? "e.g. Beer, Gorkha" : "Item name"}
+                  value={it.label}
+                  onChange={(e) => updateItem(it.id, "label", e.target.value)}
+                  className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder-white/30 focus:border-blue-400 focus:outline-none"
+                />
+                <div className="relative w-28 shrink-0">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 text-xs">Rs.</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    placeholder="0"
+                    value={it.amount}
+                    onChange={(e) => updateItem(it.id, "amount", e.target.value)}
+                    className="w-full rounded-xl bg-white/5 border border-white/10 pl-8 pr-2.5 py-2 text-xs text-white tabular placeholder-white/30 focus:border-blue-400 focus:outline-none text-right font-medium"
+                  />
+                </div>
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeItem(it.id)}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/10 transition-colors shrink-0"
+                    title="Remove item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addItem}
+            className="w-full mt-1.5 py-2 rounded-xl border border-dashed border-white/20 hover:border-blue-400/50 hover:bg-white/[0.03] text-xs font-medium text-blue-200 flex items-center justify-center gap-1.5 transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{isCredit ? "+ Add Another Item / Beer" : "+ Add Another Row"}</span>
+          </button>
+          {multiTotal > 0 && (
+            <div className="rounded-xl bg-[#1155ff]/15 border border-[#1155ff]/35 p-2.5 flex items-center justify-between text-xs mt-2">
+              <span className="text-blue-200 font-medium">Total Credit to Record:</span>
+              <span className="font-bold text-white text-sm tabular">Rs. {multiTotal.toLocaleString()}</span>
+            </div>
+          )}
         </div>
-      </Label>
+      )}
+
       <Label text={copy.note}>
-        <input type="text" placeholder={isCredit ? "e.g. Groceries, rice…" : "e.g. Cash, eSewa…"} value={note} onChange={(e) => setNote(e.target.value)}
-          className={inputClass} />
+        <input
+          type="text"
+          placeholder={isCredit ? "e.g. 5 beers, cash on Saturday…" : "e.g. Cash, eSewa…"}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className={inputClass}
+        />
       </Label>
+
       <div className="flex items-center justify-end gap-2 pt-2">
         <button onClick={onClose} className={btnGhost}>{copy.cancel}</button>
-        <button onClick={submit} disabled={!Number(amount) || Number(amount) <= 0} className={cn(btnPrimary, "disabled:opacity-40 disabled:cursor-not-allowed")}>
-          {isCredit ? copy.saveCredit : copy.recordPayment}
+        <button
+          onClick={submit}
+          disabled={!totalAmount || totalAmount <= 0}
+          className={cn(btnPrimary, "disabled:opacity-40 disabled:cursor-not-allowed")}
+        >
+          {isCredit ? copy.saveCredit : copy.recordPayment} ({`Rs. ${Math.round(totalAmount).toLocaleString()}`})
         </button>
       </div>
     </Modal>

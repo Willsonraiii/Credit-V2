@@ -12,7 +12,8 @@ const __dirname = path.dirname(__filename);
 export default defineConfig({
   plugins: [react(), tailwindcss(), viteSingleFile()],
   server: {
-    // Allow the sandbox/preview host (e.g. *.e2b.app) during development.
+    host: true,
+    port: 5174,
     allowedHosts: true,
   },
   resolve: {

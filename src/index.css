@@ -25,15 +25,17 @@ html {
 html, body, #root {
   height: 100%;
   overscroll-behavior: none;
+  background-color: #060914;
 }
 body {
   font-family: 'Inter', 'Noto Sans Devanagari', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  background-color: #060914;
   background:
-    radial-gradient(700px 400px at 15% -10%, rgba(17, 85, 255, 0.22), transparent 60%),
-    radial-gradient(600px 360px at 95% 10%, rgba(17, 85, 255, 0.12), transparent 60%),
-    linear-gradient(145deg, #000 0%, #0a0f1e 48%, #050505 100%);
+    radial-gradient(700px 400px at 15% 15%, rgba(17, 85, 255, 0.18), transparent 60%),
+    radial-gradient(600px 360px at 95% 20%, rgba(17, 85, 255, 0.10), transparent 60%),
+    linear-gradient(145deg, #000 0%, #060914 48%, #03050a 100%);
   color: #e2e8f0;
   overflow-x: hidden;
 }
@@ -91,8 +93,8 @@ body {
   opacity: 0.55;
 }
 .orb-1 {
-  width: 42rem; height: 42rem; left: -14rem; top: -16rem;
-  background: radial-gradient(circle at 30% 30%, rgba(17, 85, 255, 0.55), rgba(17, 85, 255, 0.08) 65%, transparent 75%);
+  width: 42rem; height: 42rem; left: -14rem; top: 2rem;
+  background: radial-gradient(circle at 30% 30%, rgba(17, 85, 255, 0.45), rgba(17, 85, 255, 0.05) 65%, transparent 75%);
   animation: auroraA 26s ease-in-out infinite alternate;
 }
 .orb-2 {
@@ -293,6 +295,21 @@ button:focus-visible, a:focus-visible {
 .top-safe-overlay {
   top: 1rem; /* fallback */
   top: max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem));
+}
+/* Solid status-bar plate for iOS PWA: blocks background from bleeding under the notch */
+.status-bar-plate {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: max(0.75rem, env(safe-area-inset-top, 0px));
+  background-color: #060914;
+  z-index: 50;
+  pointer-events: none;
+}
+.mb-safe {
+  margin-bottom: 0.75rem; /* fallback */
+  margin-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 /* Bottom dock: one continuous frosted surface that reaches the physical
    bottom edge (its inner .pb-safe clears the home indicator), so no raw
